@@ -16,7 +16,8 @@
   
   <p align="center">
     <a>🖼️ Gallery</a> •
-    <a>🧩 Components</a>
+    <a>🧩 Components</a> •
+    <a>❤️ Acknowledgements</a>
   </p>
 </div>
 
@@ -65,6 +66,15 @@
 | **Engine** | **Rime** (中州韵) | [Repo](https://github.com/fcitx/fcitx5-rime) |
 | **Schema** | **Rime-Ice** (雾凇拼音) | [Repo](https://github.com/iDvel/rime-ice) |
 | **Theme** | **Candlelight** | [Repo](https://github.com/thep0y/fcitx5-themes-candlelight) |
+
+---
+
+## ❤️ Special Thanks
+
+A huge shoutout to **9vvert** for his patience, guidance, and invaluable help during the installation and configuration of my Arch Linux system. This setup wouldn't be possible without his support.
+
+- 👨‍💻 **GitHub**: [9vvert](https://github.com/9vvert)
+- 🌐 **Website**: [9vvert.github.io](https://9vvert.github.io/)
 
 ---
 
