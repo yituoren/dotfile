@@ -26,19 +26,9 @@ config.cell_width = 1.1
 config.window_background_opacity = 0.85 -- 0.0 到 1.0，越小越透
 -- 注意：Arch Linux 下需要你的合成器 (如 Picom 或 Hyprland) 支持背景模糊
 -- macOS 用户自带模糊，Linux 用户通常只需设置透明度
--- config.background = {
---   {
---     source = {
---         File = "/usr/share/wallpapers/Altai/contents/images/5120x2880.png"
---     },
---     hsb = {
---         hue = 1.0,
---         saturation = 1.0,
---         brightness = 0.05,
---     },
---     opacity = 0.9,
---   },
--- }
+config.colors = {
+    background = '#101010',
+}
 
 -- 4. 去掉丑陋的顶部标题栏
 -- "RESIZE" 允许你拖动边缘调整大小，但没有标题栏
