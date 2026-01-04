@@ -18,7 +18,7 @@ config.color_scheme = 'Tokyo Night (Gogh)'
 
 -- 2. 字体设置
 -- 必须先安装 Nerd Fonts (sudo pacman -S ttf-jetbrains-mono-nerd)
-config.font = wezterm.font('JetBrains Mono', { weight = 'Bold'})
+config.font = wezterm.font('Maple Mono NF CN', { weight = 'Bold' })
 config.font_size = 12.5
 config.cell_width = 1.1
 
@@ -54,32 +54,32 @@ config.front_end = "WebGpu"
 -- config.leader = { key = 'd', mods = 'ALT', timeout_milliseconds = 2000}
 
 config.keys = {
-  -- 1. 垂直分屏
-  {
-    key = ',',
-    mods = 'ALT',
-    action = wezterm.action.SplitVertical { domain = 'CurrentPaneDomain' },
-  },
-  -- 2. 水平分屏
-  {
-    key = '.',
-    mods = 'ALT',
-    action = wezterm.action.SplitHorizontal { domain = 'CurrentPaneDomain' },
-  },
-  -- 3. 关闭当前分屏
-  {
-    key = 'd',
-    mods = 'ALT',
-    action = wezterm.action.CloseCurrentPane { confirm = true },
-  },
-  -- 4. 在分屏之间跳转
-  { key = 'LeftArrow', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Left' },
-  { key = 'RightArrow', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Right' },
-  { key = 'UpArrow', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Up' },
-  { key = 'DownArrow', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Down' },
+    -- 1. 垂直分屏
+    {
+        key = ',',
+        mods = 'ALT',
+        action = wezterm.action.SplitVertical { domain = 'CurrentPaneDomain' },
+    },
+    -- 2. 水平分屏
+    {
+        key = '.',
+        mods = 'ALT',
+        action = wezterm.action.SplitHorizontal { domain = 'CurrentPaneDomain' },
+    },
+    -- 3. 关闭当前分屏
+    {
+        key = 'd',
+        mods = 'ALT',
+        action = wezterm.action.CloseCurrentPane { confirm = true },
+    },
+    -- 4. 在分屏之间跳转
+    { key = 'LeftArrow',  mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Left' },
+    { key = 'RightArrow', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Right' },
+    { key = 'UpArrow',    mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Up' },
+    { key = 'DownArrow',  mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Down' },
 
-  { key = 'c', mods = 'CTRL', action = wezterm.action.CopyTo 'Clipboard'},
-  { key = 'v', mods = 'CTRL', action = wezterm.action.PasteFrom 'Clipboard'},
+    { key = 'c',          mods = 'ALT', action = wezterm.action.CopyTo 'Clipboard' },
+    { key = 'v',          mods = 'ALT', action = wezterm.action.PasteFrom 'Clipboard' },
 }
 
 -- =========================================================
