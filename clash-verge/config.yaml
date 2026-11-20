@@ -1,11 +1,13 @@
+# Clash Verge Rev local profile. The two server addresses are reserved for documentation.
+# Set the server, UUID, TLS server name, REALITY public key and short ID from your provider before use.
 mixed-port: 7897
 mode: rule
 log-level: info
 allow-lan: false
-ipv6: false
-
+ipv6: true
 dns:
   enable: true
+  ipv6: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   default-nameserver:
@@ -20,56 +22,72 @@ dns:
   fallback-filter:
     geoip: true
     geoip-code: CN
-
 proxies:
-  - name: "Reality"
+  - name: JP-IPv6
     type: vless
-    server: 45.76.193.194
+    server: 2001:db8::1
     port: 443
-    uuid: your_uuid_here
+    uuid: 00000000-0000-4000-8000-000000000001
     network: tcp
     tls: true
     udp: true
     flow: xtls-rprx-vision
-    servername: aws.amazon.com
+    servername: example.org
     reality-opts:
-      public-key: your_public_key_here
-      short-id: ""
+      public-key: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA
+    short-id: ''
     client-fingerprint: chrome
-
+  - name: JP-IPv4
+    type: vless
+    server: 192.0.2.1
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000001
+    network: tcp
+    tls: true
+    udp: true
+    flow: xtls-rprx-vision
+    servername: example.org
+    reality-opts:
+      public-key: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA
+    short-id: ''
+    client-fingerprint: chrome
 proxy-groups:
-  - name: "PROXY"
+  - name: Proxy
     type: select
     proxies:
-      - Reality
+      - JP-IPv6
+      - JP-IPv4
       - DIRECT
-
 rules:
-  - DOMAIN-KEYWORD,google,PROXY
-  - DOMAIN-KEYWORD,gvt1,PROXY
-  - DOMAIN-KEYWORD,gvt2,PROXY
-  - DOMAIN-KEYWORD,gstatic,PROXY
-  - DOMAIN-KEYWORD,ggpht,PROXY
-  - DOMAIN-SUFFIX,ytimg.com,PROXY
-  - DOMAIN-SUFFIX,1e100.net,PROXY
-    
-  - DOMAIN-KEYWORD,openai,PROXY
-  - DOMAIN-KEYWORD,chatgpt,PROXY
-  - DOMAIN-KEYWORD,gemini,PROXY
-  - DOMAIN-KEYWORD,claude,PROXY
-  - DOMAIN-KEYWORD,anthropic,PROXY
-    
-  - DOMAIN-KEYWORD,cursor,PROXY
-  - DOMAIN-KEYWORD,huggingface,PROXY
-  - DOMAIN-KEYWORD,wandb,PROXY
-  - DOMAIN-KEYWORD,github,PROXY
-    
-  - DOMAIN-KEYWORD,youtube,PROXY
-  - DOMAIN-SUFFIX,x.com,PROXY
-  - DOMAIN-KEYWORD,reddit,PROXY
-  - DOMAIN-SUFFIX,redd.it,PROXY
-    
-  - DOMAIN-KEYWORD,golang,PROXY
-
+  - DOMAIN-KEYWORD,google,Proxy
+  - DOMAIN-KEYWORD,gvt1,Proxy
+  - DOMAIN-KEYWORD,gvt2,Proxy
+  - DOMAIN-KEYWORD,gstatic,Proxy
+  - DOMAIN-KEYWORD,ggpht,Proxy
+  - DOMAIN-SUFFIX,ytimg.com,Proxy
+  - DOMAIN-SUFFIX,1e100.net,Proxy
+  - DOMAIN-KEYWORD,openai,Proxy
+  - DOMAIN-KEYWORD,chatgpt,Proxy
+  - DOMAIN-KEYWORD,gemini,Proxy
+  - DOMAIN-KEYWORD,claude,Proxy
+  - DOMAIN-KEYWORD,anthropic,Proxy
+  - DOMAIN-KEYWORD,cursor,Proxy
+  - DOMAIN-KEYWORD,huggingface,Proxy
+  - DOMAIN-KEYWORD,wandb,Proxy
+  - DOMAIN-KEYWORD,github,Proxy
+  - DOMAIN-SUFFIX,zed.dev,Proxy
+  - DOMAIN-KEYWORD,golang,Proxy
+  - DOMAIN-KEYWORD,youtube,Proxy
+  - DOMAIN-SUFFIX,x.com,Proxy
+  - DOMAIN-KEYWORD,twitter,Proxy
+  - DOMAIN-KEYWORD,twimg,Proxy
+  - DOMAIN-KEYWORD,reddit,Proxy
+  - DOMAIN-SUFFIX,redd.it,Proxy
+  - DOMAIN-KEYWORD,discord,Proxy
+  - DOMAIN-KEYWORD,twitch,Proxy
+  - DOMAIN-KEYWORD,telegram,Proxy
+  - DOMAIN-KEYWORD,instagram,Proxy
+  - DOMAIN-KEYWORD,hltv,Proxy
   - GEOIP,LAN,DIRECT
   - GEOIP,CN,DIRECT
+  - MATCH,DIRECT
