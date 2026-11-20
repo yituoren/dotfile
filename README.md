@@ -27,11 +27,10 @@
 
 ## 🖼️ **Gallery**
 
+https://github.com/user-attachments/assets/dda8d8cf-f32c-4807-806d-f6e92ca285dc
+
 <div align="center">
-  <a href="https://raw.githubusercontent.com/yituoren/dotfile/main/assets/desktop.mp4">
-    <img src="assets/desktop.webp" alt="Screen recording of my niri desktop and Quickshell dashboard" width="100%">
-    <br>Full recording with audio (2:55)
-  </a>
+  <a href="assets/desktop.mp4">Original recording (2560 × 1600)</a>
   · <a href="assets/legacy.jpg">Legacy Hyprland desktop</a>
 </div>
 
