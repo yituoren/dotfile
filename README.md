@@ -23,12 +23,6 @@
   </p>
 </div>
 
-<br />
-
-> My bar, dashboard and lock screen share the colors of the current wallpaper. The dashboard brings together music, weather and the calendar. The Arch logo opens my chat panel.
->
-> **⭐ If you find this helpful, please consider giving this repo a star!**
-
 ---
 
 <a name="gallery"></a>
@@ -87,7 +81,8 @@
 | **[Fonts & Symbols](docs/colors.md)** | [Maple Mono NF CN](https://github.com/subframe7536/maple-font) · [Google Sans Flex](https://design.google/library/google-sans-flex-font)<br>[Material Symbols Rounded](https://fonts.google.com/icons) | Terminal, launcher and GTK text<br>Shell icons |
 | **[Desktop Theme](matugen/templates/kde/MineDesktop.colors)** | [Darkly](https://github.com/Bali10050/darkly) · [Breeze Plus](https://github.com/mjkim0727/breeze-plus) · [Bibata Modern Classic](https://github.com/ful1e5/Bibata_Cursor) | KDE widgets, application icons and pointer |
 | **[Portals](xdg-desktop-portal/niri-portals.conf)** | [xdg-desktop-portal-gtk](https://github.com/flatpak/xdg-desktop-portal-gtk) · [GNOME Keyring](https://gitlab.gnome.org/GNOME/gnome-keyring) | File dialogs and secret storage |
-| **Screen Tools** | [niri](https://github.com/YaLTeR/niri) · [slurp](https://github.com/emersion/slurp) · [grim](https://gitlab.freedesktop.org/emersion/grim) · [Tesseract](https://github.com/tesseract-ocr/tesseract) | Screenshots, color picking and region OCR |
+| **[Screenshots & Color Picker](niri/binds.kdl)** | [niri](https://github.com/YaLTeR/niri) · [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | niri captures screens, windows and regions<br>`wl-copy` copies the picked color |
+| **[Copy Text From an Image](niri/binds.kdl)** | [slurp](https://github.com/emersion/slurp) · [grim](https://gitlab.freedesktop.org/emersion/grim)<br>[Tesseract](https://github.com/tesseract-ocr/tesseract) · [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Select an area → capture its pixels<br>Recognize the text → copy it to the clipboard |
 | **[Proxy](clash-verge/config.yaml)** | [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) · [Mihomo](https://github.com/MetaCubeX/mihomo) | Local VLESS profile with IPv6 and IPv4 nodes<br>Fill in provider details before importing the template |
 
 ---
@@ -120,4 +115,4 @@ The bar’s blob renderer is adapted from the [Caelestia shell](https://github.c
 
 ## 📄 **License**
 
-Feel free to use and modify these configurations. A star back to the original repo would be appreciated!
+Feel free to use and modify these configurations.
