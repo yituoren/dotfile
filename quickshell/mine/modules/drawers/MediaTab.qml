@@ -2,15 +2,15 @@ pragma ComponentBehavior: Bound
 
 // MediaTab —— dashboard "Media" tab
 //
-// 布局(上下交换后):
-//   ┌─ 上排:vol pill + sink ▼ + player ▼(按比例分宽,均匀间距)
+// Layout:
+//   Top row: volume, sink and player selectors with proportional widths and equal spacing.
 //   │
-//   └─ 下半:[左 文字播放面板(无底板)]  [右 唱片 + cava 环形 halo]
-//        - 唱片:圆形封面(MultiEffect mask) + 中心钉 + 周围 32 根 cava bar 朝外辐射
-//        - 文字面板:title(小一点)/ artist / album / [歌词留空区] / progress / time / controls
+//   Bottom row: playback information on the left and the disc with its cava halo on the right.
+//        - A MultiEffect mask clips the cover to a disc with a center pin and 32 radial cava bars.
+//        - The playback panel contains title, artist, album, lyrics, progress, time and controls.
 //
-// 关键依赖:QtQuick.Effects 的 MultiEffect 把方形封面 mask 成圆形
-// Cava service 启 cava 进程,本 Tab 可见时开,销毁时关
+// QtQuick.Effects.MultiEffect masks the square album art to a circle.
+// The tab requests cava while visible and releases it on destruction.
 
 import QtQuick
 import QtQuick.Effects
@@ -21,28 +21,20 @@ import qs.modules.bar.widgets
 Item {
     id: root
 
-    readonly property MprisPlayer active: MediaPlayer.active
-    readonly property real progress: {
-        const a = root.active
-        return (a && a.length > 0) ? (a.position % a.length) / a.length : 0
-    }
+    readonly property var active: MediaPlayer.active
+    // Apple Music can publish its playlist clock on both browser interfaces.
+    readonly property real trackDuration: Lyrics.streamClock ? Lyrics.catalogDuration : MediaPlayer.duration
+    readonly property bool trackClock: !Lyrics.streamClock || (trackDuration > 0 && MediaPlayer.duration > 0
+        && Math.abs(trackDuration - MediaPlayer.duration) <= 4)
+    readonly property bool showPosition: MediaPlayer.positionKnown && (!Lyrics.streamClock
+        || (trackDuration > 0 && MediaPlayer.position <= trackDuration))
+    readonly property real progress: showPosition && trackDuration > 0 ? Math.min(1, MediaPlayer.position / trackDuration) : 0
     readonly property var defaultSink: SystemStatus.audioSinks.find(s => s.isDefault) || null
 
-    // dropdown 互斥:"" / "sink" / "player"
+    // Only one dropdown can be open: "", "sink" or "player".
     property string openMenu: ""
 
-    // Cava 生命周期 —— 通过 needMediaTab 标记;Cava.enabled = needMediaTab || needBarViz
-    Component.onCompleted: Cava.needMediaTab = true
-    Component.onDestruction: Cava.needMediaTab = false
-
-    // MPRIS position tick
-    Timer {
-        running: root.active ? root.active.isPlaying : false
-        interval: 1000; repeat: true; triggeredOnStart: true
-        onTriggered: { if (root.active) root.active.positionChanged() }
-    }
-
-    // 唱片旋转
+    // Disc rotation
     property real discAngle: 0
     Timer {
         running: root.active ? root.active.isPlaying : false
@@ -60,7 +52,7 @@ Item {
         return "speaker"
     }
 
-    // ============ 空态 ============
+    // ============ Empty state ============
     Item {
         anchors.fill: parent
         visible: !root.active
@@ -87,14 +79,14 @@ Item {
         }
     }
 
-    // ============ 主视图 ============
+    // ============ Player view ============
     Item {
         id: mainView
         anchors.fill: parent
         visible: root.active !== null
 
-        // ─────────────────── 上排:vol + sink ▼ + player ▼ ───────────────────
-        // 按比例分:vol 36% / sink 28% / player 36%(spacing 内扣)
+        // ---- Volume, sink and player selectors ----
+        // Distribute the width after spacing: 36% volume, 28% sink and 36% player.
         Item {
             id: topRow
             anchors {
@@ -128,13 +120,10 @@ Item {
                         verticalCenter: parent.verticalCenter
                     }
                     width: 22; horizontalAlignment: Text.AlignHCenter
-                    text: SystemStatus.volumeMuted ? "volume_off"
-                          : SystemStatus.volumePercent === 0 ? "volume_mute"
-                          : SystemStatus.volumePercent < 34 ? "volume_down"
-                          : "volume_up"
+                    text: SystemStatus.volumeIcon
                     font.family: "Material Symbols Rounded"
                     font.pixelSize: 20
-                    color: SystemStatus.volumeMuted ? Theme.colors.on_surface_variant : Theme.colors.primary
+                    color: SystemStatus.volumeSilent ? Theme.colors.on_surface_variant : Theme.colors.primary
                     MouseArea {
                         anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -157,7 +146,7 @@ Item {
                         verticalCenter: parent.verticalCenter
                     }
                     width: 32; horizontalAlignment: Text.AlignRight
-                    text: SystemStatus.volumeMuted ? "—" : `${SystemStatus.volumePercent}%`
+                    text: SystemStatus.volumeSilent ? "—" : `${SystemStatus.volumePercent}%`
                     color: Theme.colors.on_surface
                     font.family: "Maple Mono NF CN"
                     font.pixelSize: 12
@@ -284,7 +273,7 @@ Item {
             }
         }
 
-        // ─────────────────── 下半:文字面板 + 唱片 halo ───────────────────
+        // ---- Playback details and disc halo ----
         Item {
             id: playbackArea
             anchors {
@@ -296,7 +285,7 @@ Item {
                 bottomMargin: 10
             }
 
-            // ---- 左:文字播放面板(无底板)----
+            // ---- Playback information on the left ----
             Item {
                 id: panel
                 anchors {
@@ -307,17 +296,17 @@ Item {
                     topMargin: 32
                     bottomMargin: 18
                 }
-                // 给右侧 disc 留位置:disc 280 + disc rightMargin 28 + 中间 gap 28 + panel leftMargin 28 在 anchor 里扣过
+                // Allow 280 px for the disc, 28 px for its right margin and 28 px between it and the panel.
                 width: parent.width - 280 - 28 - 28 - 28
 
-                // ── 顶部 title / artist / album ──
+                // ---- Title, artist and album ----
                 Text {
                     id: titleText
                     anchors {
                         top: parent.top
                         left: parent.left; right: parent.right
                     }
-                    text: root.active && root.active.trackTitle ? root.active.trackTitle : "Unknown Title"
+                    text: MediaPlayer.trackTitle || "Unknown Title"
                     color: Theme.colors.on_surface
                     font.family: "Maple Mono NF CN"
                     font.pixelSize: 17
@@ -330,7 +319,7 @@ Item {
                         top: titleText.bottom; topMargin: 4
                         left: parent.left; right: parent.right
                     }
-                    text: root.active && root.active.trackArtist ? root.active.trackArtist : ""
+                    text: MediaPlayer.trackArtist
                     color: Theme.colors.primary
                     font.family: "Maple Mono NF CN"
                     font.pixelSize: 13
@@ -343,7 +332,7 @@ Item {
                         top: artistText.bottom; topMargin: 2
                         left: parent.left; right: parent.right
                     }
-                    text: root.active && root.active.trackAlbum ? root.active.trackAlbum : ""
+                    text: MediaPlayer.trackAlbum
                     color: Theme.colors.on_surface_variant
                     opacity: 0.75
                     font.family: "Maple Mono NF CN"
@@ -353,7 +342,7 @@ Item {
                     visible: text.length > 0
                 }
 
-                // ── 底部:控件 + 时间 + 进度 ──
+                // ---- Controls, time and progress ----
                 Row {
                     id: controlsRow
                     anchors {
@@ -404,44 +393,44 @@ Item {
 
                     IconBtn {
                         anchors.verticalCenter: parent.verticalCenter
-                        icon: (root.active && root.active.shuffle) ? "shuffle_on" : "shuffle"
-                        disabled: !(root.active && root.active.shuffleSupported)
-                        onClicked: { if (root.active) root.active.shuffle = !root.active.shuffle }
+                        icon: (root.active && MediaPlayer.transport?.shuffle) ? "shuffle_on" : "shuffle"
+                        disabled: !(root.active && MediaPlayer.transport?.shuffleSupported)
+                        onClicked: { if (MediaPlayer.transport?.shuffleSupported) MediaPlayer.transport.shuffle = !MediaPlayer.transport.shuffle }
                     }
                     IconBtn {
                         anchors.verticalCenter: parent.verticalCenter
                         icon: "skip_previous"
-                        disabled: !(root.active && root.active.canGoPrevious)
-                        onClicked: if (root.active) root.active.previous()
+                        disabled: !MediaPlayer.previousPlayer
+                        onClicked: MediaPlayer.previousPlayer?.previous()
                     }
                     IconBtn {
                         anchors.verticalCenter: parent.verticalCenter
                         big: true; primary: true
                         icon: (root.active && root.active.isPlaying) ? "pause" : "play_arrow"
-                        disabled: !(root.active && root.active.canTogglePlaying)
-                        onClicked: if (root.active) root.active.togglePlaying()
+                        disabled: !MediaPlayer.playPausePlayer
+                        onClicked: MediaPlayer.playPausePlayer?.togglePlaying()
                     }
                     IconBtn {
                         anchors.verticalCenter: parent.verticalCenter
                         icon: "skip_next"
-                        disabled: !(root.active && root.active.canGoNext)
-                        onClicked: if (root.active) root.active.next()
+                        disabled: !MediaPlayer.nextPlayer
+                        onClicked: MediaPlayer.nextPlayer?.next()
                     }
                     IconBtn {
                         anchors.verticalCenter: parent.verticalCenter
                         icon: {
                             if (!root.active) return "repeat"
-                            switch (root.active.loopState) {
+                            switch (MediaPlayer.transport?.loopState) {
                             case MprisLoopState.Track: return "repeat_one_on"
                             case MprisLoopState.Playlist: return "repeat_on"
                             default: return "repeat"
                             }
                         }
-                        disabled: !(root.active && root.active.loopSupported)
+                        disabled: !(root.active && MediaPlayer.transport?.loopSupported)
                         onClicked: {
                             if (!root.active) return
-                            const s = root.active.loopState
-                            root.active.loopState = s === MprisLoopState.None
+                            const s = MediaPlayer.transport?.loopState
+                            MediaPlayer.transport.loopState = s === MprisLoopState.None
                                 ? MprisLoopState.Playlist
                                 : s === MprisLoopState.Playlist
                                     ? MprisLoopState.Track
@@ -460,7 +449,7 @@ Item {
                     Text {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        text: MediaPlayer.formatTime(root.active ? root.active.position : 0)
+                        text: root.showPosition ? MediaPlayer.formatTime(MediaPlayer.position) : "—"
                         color: Theme.colors.on_surface_variant
                         font.family: "Maple Mono NF CN"
                         font.pixelSize: 11
@@ -468,7 +457,7 @@ Item {
                     Text {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        text: MediaPlayer.formatTime(root.active ? root.active.length : 0)
+                        text: root.trackDuration > 0 ? MediaPlayer.formatTime(root.trackDuration) : "—"
                         color: Theme.colors.on_surface_variant
                         font.family: "Maple Mono NF CN"
                         font.pixelSize: 11
@@ -486,96 +475,167 @@ Item {
                             left: parent.left; right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
+                        enabled: root.trackClock && !!MediaPlayer.clockPlayer?.canSeek && MediaPlayer.livePosition && root.showPosition && MediaPlayer.clockPlayer.lengthSupported
                         value: root.progress
                         minValue: 0
                         onMoved: (v) => {
-                            const a = root.active
-                            if (a && a.canSeek && a.positionSupported && a.length > 0) {
-                                a.position = v * a.length
+                            const a = MediaPlayer.clockPlayer
+                            if (root.trackClock && a?.canSeek && a.positionSupported && a.lengthSupported && MediaPlayer.duration > 0) {
+                                a.position = v * MediaPlayer.duration
                             }
                         }
                     }
                 }
 
-                // ── 中间歌词区:Lyrics service → 前一句 / 当前 / 后一句 三行 ──
-                // 数据源 services/Lyrics.qml(LRCLIB)。
-                // - status ok:正常 3 行滚动
-                // - status loading:中间显示 "Loading lyrics…"
-                // - status miss/idle:中间淡显 "♪" 或 "No lyrics"
-                // - status plain:无时间戳,中间显示首行,前后留空
                 Item {
                     id: lyricArea
                     anchors {
-                        top: albumText.bottom; topMargin: 18
-                        bottom: progressRow.top; bottomMargin: 18
+                        top: albumText.bottom; topMargin: 12
+                        bottom: progressRow.top; bottomMargin: 12
                         left: parent.left; right: parent.right
                     }
+                    clip: true
+                    readonly property int typeSize: width < 360 || height < 110 ? 20 : 24
+                    readonly property int secondaryTypeSize: Math.round(typeSize * 0.84)
+                    readonly property bool synced: Lyrics.status === "ok" && Lyrics.canSync
+                    readonly property bool plain: Lyrics.status === "plain" || (Lyrics.status === "ok" && !Lyrics.canSync)
+                    readonly property bool shaderEffects: GraphicsInfo.api !== GraphicsInfo.Software
 
-                    readonly property bool synced: Lyrics.status === "ok"
-                    readonly property string midText: {
-                        switch (Lyrics.status) {
-                        case "ok": return Lyrics.currentLine || "♪"
-                        case "loading": return "Loading lyrics…"
-                        case "miss": return "No lyrics"
-                        case "error": return "Lyrics fetch failed"
-                        case "plain": return Lyrics.lines.length > 0 ? Lyrics.lines[0].text : ""
-                        default: return root.active ? "♪" : "—"
+                    // Fade the glyphs themselves so the wallpaper stays visible at both edges.
+                    Rectangle {
+                        id: lyricFade
+                        anchors.fill: parent
+                        visible: false
+                        layer.enabled: lyricArea.synced && lyricArea.shaderEffects
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "transparent" }
+                            GradientStop { position: 0.18; color: "white" }
+                            GradientStop { position: 0.82; color: "white" }
+                            GradientStop { position: 1; color: "transparent" }
                         }
                     }
-                    readonly property color midColor: lyricArea.synced
-                        ? Theme.colors.primary
-                        : Theme.colors.on_surface_variant
-                    readonly property real midOpacity: lyricArea.synced ? 1.0 : 0.45
 
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        width: parent.width
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: parent.width
-                            horizontalAlignment: Text.AlignHCenter
-                            text: Lyrics.prevLine
-                            color: Theme.colors.on_surface_variant
-                            opacity: 0.35
-                            font.family: "Maple Mono NF CN"
-                            font.pixelSize: 11
-                            font.styleName: "Medium"
-                            elide: Text.ElideRight
-                            Behavior on text { PropertyAnimation { duration: 0 } }
+                    ListView {
+                        id: timedLyrics
+                        anchors.fill: parent
+                        visible: lyricArea.synced
+                        layer.enabled: visible && lyricArea.shaderEffects
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: lyricFade
+                            maskThresholdMin: 0.5
+                            maskSpreadAtMin: 1
                         }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: parent.width
+                        model: lyricArea.synced ? Lyrics.lines : []
+                        currentIndex: count ? Math.max(0, Lyrics.currentIndex) : -1
+                        spacing: 10
+                        boundsBehavior: Flickable.StopAtBounds
+                        readonly property real focusY: height / 3
+                        property int lastLine: -1
+                        function centerLine(): void {
+                            if (currentIndex < 0 || !currentItem || height <= 0) return
+                            forceLayout()
+                            const start = contentY
+                            scrollLine.stop()
+                            positionViewAtIndex(currentIndex, ListView.Beginning)
+                            contentY = currentItem.y - Math.max(0, focusY - currentItem.height / 2)
+                            const end = contentY
+                            if (lastLine >= 0 && Math.abs(currentIndex - lastLine) === 1 && Math.abs(end - start) < height) {
+                                scrollLine.from = start
+                                scrollLine.to = end
+                                scrollLine.start()
+                            }
+                            lastLine = currentIndex
+                        }
+                        onCurrentIndexChanged: Qt.callLater(centerLine)
+                        onCurrentItemChanged: Qt.callLater(centerLine)
+                        onModelChanged: { lastLine = -1; Qt.callLater(centerLine) }
+                        onHeightChanged: Qt.callLater(centerLine)
+                        onWidthChanged: Qt.callLater(centerLine)
+                        onMovementStarted: scrollLine.stop()
+                        NumberAnimation {
+                            id: scrollLine
+                            target: timedLyrics; property: "contentY"
+                            duration: 380; easing.type: Easing.InOutCubic
+                        }
+                        header: Item { height: timedLyrics.focusY }
+                        footer: Item { height: timedLyrics.height - timedLyrics.focusY }
+
+                        delegate: Text {
+                            id: lyricLine
+                            required property var modelData
+                            required property int index
+                            readonly property bool singing: index === timedLyrics.currentIndex
+                            // Treat the middle of a wrapped verse as one focus area.
+                            readonly property real centerOffset: Math.abs(y + height / 2 - timedLyrics.contentY - timedLyrics.focusY)
+                            readonly property real distance: Math.min(1, Math.max(0,
+                                centerOffset - (height - height / Math.max(1, lineCount)) / 2 - 1)
+                                / Math.max(1, timedLyrics.height * 0.48))
+                            width: timedLyrics.width
+                            text: modelData.text
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
                             horizontalAlignment: Text.AlignHCenter
-                            text: lyricArea.midText
-                            color: lyricArea.midColor
-                            opacity: lyricArea.midOpacity
                             font.family: "Maple Mono NF CN"
-                            font.pixelSize: 15
                             font.styleName: "Bold"
-                            elide: Text.ElideRight
-                            Behavior on opacity { NumberAnimation { duration: 180 } }
-                            Behavior on color { ColorAnimation { duration: 180 } }
+                            font.pixelSize: singing ? lyricArea.typeSize : lyricArea.secondaryTypeSize
+                            color: singing ? Theme.colors.primary : Theme.colors.on_surface_variant
+                            opacity: singing ? 1 : 1 - 0.76 * distance
+                            layer.enabled: !singing && lyricArea.shaderEffects && distance > 0 && y + height > timedLyrics.contentY
+                                           && y < timedLyrics.contentY + timedLyrics.height
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blurMax: 8
+                                blur: 0.65 * lyricLine.distance
+                            }
+                            Behavior on color { ColorAnimation { duration: 240 } }
                         }
+                    }
+
+                    Flickable {
+                        id: plainView
+                        anchors.fill: parent
+                        visible: lyricArea.plain
+                        contentWidth: width
+                        contentHeight: plainLyrics.implicitHeight
+                        boundsBehavior: Flickable.StopAtBounds
                         Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: parent.width
+                            id: plainLyrics
+                            width: plainView.width
+                            text: lyricArea.plain ? Lyrics.lines.map(l => l.text).join("\n") : ""
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            lineHeight: 1.23
                             horizontalAlignment: Text.AlignHCenter
-                            text: Lyrics.nextLine
-                            color: Theme.colors.on_surface_variant
-                            opacity: 0.35
                             font.family: "Maple Mono NF CN"
-                            font.pixelSize: 11
-                            font.styleName: "Medium"
-                            elide: Text.ElideRight
+                            font.styleName: "Bold"
+                            font.pixelSize: lyricArea.secondaryTypeSize
+                            color: Theme.colors.on_surface_variant
+                            onTextChanged: plainView.contentY = 0
                         }
+                    }
+
+                    Text {
+                        visible: Lyrics.status !== "instrumental" && !lyricArea.synced && !lyricArea.plain
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: {
+                            switch (Lyrics.status) {
+                            case "loading": return "Loading lyrics…"
+                            case "instrumental": return ""
+                            case "miss": return "No lyrics"
+                            case "error": return "Lyrics fetch failed"
+                            default: return root.active ? "♪" : "—"
+                            }
+                        }
+                        color: Theme.colors.on_surface_variant
+                        font.family: "Maple Mono NF CN"
+                        font.pixelSize: 14
                     }
                 }
             }
 
-            // ---- 右:唱片 + cava 环形 halo ----
+            // ---- Disc and cava halo on the right ----
             Item {
                 id: discArea
                 anchors {
@@ -586,8 +646,8 @@ Item {
                 width: 280
                 height: 280
 
-                readonly property real coverDiameter: 174  // 内圆封面(略缩,留更多 halo 空间)
-                readonly property real innerRadius: discArea.coverDiameter / 2 + 8  // halo 起点
+                readonly property real coverDiameter: 174  // Reduce the cover diameter to leave room for the halo.
+                readonly property real innerRadius: discArea.coverDiameter / 2 + 8  // Inner edge of the halo
                 readonly property real maxBar: 36
 
                 // ── cava halo bars ──
@@ -604,7 +664,7 @@ Item {
                         rotation: barItem.angle
 
                         Rectangle {
-                            // 中心在父 Item (0,0),rotation=0 时朝正上;height 增加杆向外延伸
+                            // Rotate around the parent origin. At zero rotation each bar grows straight up.
                             x: -width / 2
                             y: -(discArea.innerRadius + height)
                             width: 4
@@ -619,7 +679,7 @@ Item {
                     }
                 }
 
-                // ── 唱片本体(整圈跟着 discAngle 转)──
+                // ---- Rotating disc ----
                 Item {
                     id: discSpin
                     anchors.centerIn: parent
@@ -627,20 +687,20 @@ Item {
                     height: discArea.coverDiameter
                     rotation: root.discAngle
 
-                    // vinyl 黑底
+                    // Black vinyl base
                     Rectangle {
                         anchors.fill: parent
                         radius: width / 2
                         color: "#0a0a0a"
                     }
 
-                    // 圆形封面 —— MultiEffect mask 把方形 image 裁圆
+                    // Clip the square cover to a circle with a MultiEffect mask.
                     Image {
                         id: coverImage
                         anchors.centerIn: parent
                         width: discArea.coverDiameter - 16
                         height: discArea.coverDiameter - 16
-                        source: root.active ? MediaPlayer.getArtUrl(root.active) : ""
+                        source: MediaPlayer.getArtUrl(root.active)
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         sourceSize.width: width
@@ -667,7 +727,7 @@ Item {
                         visible: coverImage.status === Image.Ready
                     }
 
-                    // 没封面时的 fallback
+                    // Fallback for missing cover art
                     Rectangle {
                         anchors.fill: coverImage
                         radius: width / 2
@@ -683,7 +743,7 @@ Item {
                         }
                     }
 
-                    // 中心钉(在旋转层里所以跟着转,符合 vinyl 视觉)
+                    // Rotate the center pin with the vinyl.
                     Rectangle {
                         anchors.centerIn: parent
                         width: 14; height: 14
@@ -696,8 +756,8 @@ Item {
             }
         }
 
-        // ─────────────────── Dropdown menus(在 playbackArea 之后,z 序自然在上)───────────────────
-        // sink menu —— 从 sinkBtn 下方展开,覆盖 playbackArea
+        // ---- Dropdown menus above playbackArea in stacking order ----
+        // Open the sink menu below sinkBtn over the playback area.
         Rectangle {
             id: sinkMenu
             visible: root.openMenu === "sink" || menuOpacity > 0
@@ -705,72 +765,79 @@ Item {
             property real menuOpacity: root.openMenu === "sink" ? 1 : 0
             Behavior on menuOpacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
-            x: sinkBtn.x
-            y: sinkBtn.y + sinkBtn.height + 6
+            x: topRow.x + sinkBtn.x
+            y: topRow.y + sinkBtn.y + sinkBtn.height + 6
             width: sinkBtn.width
-            height: Math.min(SystemStatus.audioSinks.length * 42 + 12, 220)
+            height: Math.min(sinkRows.implicitHeight + 12, 220)
             radius: 16
             color: Theme.colors.surface_container_high
             z: 10
 
-            Column {
+            Flickable {
                 anchors.fill: parent
                 anchors.margins: 6
-                spacing: 2
-
-                Repeater {
-                    model: SystemStatus.audioSinks
-                    delegate: Rectangle {
-                        id: sinkItem
-                        required property var modelData
-                        width: parent.width
-                        height: 36
-                        radius: 12
-                        color: sinkItem.modelData.isDefault
-                            ? Theme.colors.primary_container
-                            : (sinkItemHover.containsMouse ? Theme.colors.surface_container_highest : "transparent")
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Text {
-                            id: sinkItemIcon
-                            anchors {
-                                left: parent.left; leftMargin: 10
-                                verticalCenter: parent.verticalCenter
-                            }
-                            width: 20
-                            horizontalAlignment: Text.AlignHCenter
-                            text: root.sinkIcon(sinkItem.modelData)
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 18
+                clip: true
+                contentWidth: width
+                contentHeight: sinkRows.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: sinkRows
+                    width: parent.width
+                    spacing: 2
+                    Repeater {
+                        model: SystemStatus.audioSinks
+                        delegate: Rectangle {
+                            id: sinkItem
+                            required property var modelData
+                            width: parent.width
+                            height: 36
+                            radius: 12
                             color: sinkItem.modelData.isDefault
-                                ? Theme.colors.on_primary_container
-                                : Theme.colors.on_surface
-                        }
-                        Text {
-                            anchors {
-                                left: sinkItemIcon.right; leftMargin: 8
-                                right: parent.right; rightMargin: 10
-                                verticalCenter: parent.verticalCenter
-                            }
-                            text: sinkItem.modelData.description
-                            color: sinkItem.modelData.isDefault
-                                ? Theme.colors.on_primary_container
-                                : Theme.colors.on_surface
-                            font.family: "Maple Mono NF CN"
-                            font.pixelSize: 12
-                            font.styleName: sinkItem.modelData.isDefault ? "Bold" : "Medium"
-                            elide: Text.ElideRight
-                        }
-                        MouseArea {
-                            id: sinkItemHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (!sinkItem.modelData.isDefault) {
-                                    SystemStatus.setDefaultSink(sinkItem.modelData.name)
+                                ? Theme.colors.primary_container
+                                : (sinkItemHover.containsMouse ? Theme.colors.surface_container_highest : "transparent")
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            Text {
+                                id: sinkItemIcon
+                                anchors {
+                                    left: parent.left; leftMargin: 10
+                                    verticalCenter: parent.verticalCenter
                                 }
-                                root.openMenu = ""
+                                width: 20
+                                horizontalAlignment: Text.AlignHCenter
+                                text: root.sinkIcon(sinkItem.modelData)
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 18
+                                color: sinkItem.modelData.isDefault
+                                    ? Theme.colors.on_primary_container
+                                    : Theme.colors.on_surface
+                            }
+                            Text {
+                                anchors {
+                                    left: sinkItemIcon.right; leftMargin: 8
+                                    right: parent.right; rightMargin: 10
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                text: sinkItem.modelData.description
+                                color: sinkItem.modelData.isDefault
+                                    ? Theme.colors.on_primary_container
+                                    : Theme.colors.on_surface
+                                font.family: "Maple Mono NF CN"
+                                font.pixelSize: 12
+                                font.styleName: sinkItem.modelData.isDefault ? "Bold" : "Medium"
+                                elide: Text.ElideRight
+                            }
+                            MouseArea {
+                                id: sinkItemHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (!sinkItem.modelData.isDefault) {
+                                        SystemStatus.setDefaultSink(sinkItem.modelData.name)
+                                    }
+                                    root.openMenu = ""
+                                }
                             }
                         }
                     }
@@ -786,10 +853,10 @@ Item {
             property real menuOpacity: root.openMenu === "player" ? 1 : 0
             Behavior on menuOpacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
-            x: playerBtn.x
-            y: playerBtn.y + playerBtn.height + 6
+            x: topRow.x + playerBtn.x
+            y: topRow.y + playerBtn.y + playerBtn.height + 6
             width: playerBtn.width
-            height: Math.max(48, Math.min(MediaPlayer.list.length * 42 + 12, 220))
+            height: Math.max(48, Math.min(playerRows.implicitHeight + 12, 220))
             radius: 16
             color: Theme.colors.surface_container_high
             z: 10
@@ -804,64 +871,77 @@ Item {
                 font.pixelSize: 12
             }
 
-            Column {
+            Flickable {
                 anchors.fill: parent
                 anchors.margins: 6
-                spacing: 2
+                clip: true
+                contentWidth: width
+                contentHeight: playerRows.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: playerRows
+                    width: parent.width
+                    spacing: 2
+                    Repeater {
+                        model: MediaPlayer.list
+                        delegate: Rectangle {
+                            id: pItem
+                            required property var modelData
+                            readonly property bool isActive: pItem.modelData.dbusName === root.active?.dbusName
 
-                Repeater {
-                    model: MediaPlayer.list
-                    delegate: Rectangle {
-                        id: pItem
-                        required property MprisPlayer modelData
-                        readonly property bool isActive: pItem.modelData === root.active
-
-                        width: parent.width
-                        height: 36
-                        radius: 12
-                        color: pItem.isActive
-                            ? Theme.colors.primary_container
-                            : (pItemHover.containsMouse ? Theme.colors.surface_container_highest : "transparent")
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Text {
-                            id: pItemIcon
-                            anchors {
-                                left: parent.left; leftMargin: 10
-                                verticalCenter: parent.verticalCenter
-                            }
-                            width: 20
-                            horizontalAlignment: Text.AlignHCenter
-                            text: pItem.modelData.isPlaying ? "play_arrow" : "music_note"
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 18
+                            width: parent.width
+                            height: 36
+                            radius: 12
                             color: pItem.isActive
-                                ? Theme.colors.on_primary_container
-                                : Theme.colors.on_surface
-                        }
-                        Text {
-                            anchors {
-                                left: pItemIcon.right; leftMargin: 8
-                                right: parent.right; rightMargin: 10
-                                verticalCenter: parent.verticalCenter
+                                ? Theme.colors.primary_container
+                                : (pItemHover.containsMouse ? Theme.colors.surface_container_highest : "transparent")
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            Text {
+                                id: pItemIcon
+                                anchors {
+                                    left: parent.left; leftMargin: 10
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                width: 20
+                                horizontalAlignment: Text.AlignHCenter
+                                text: pItem.modelData.isPlaying ? "play_arrow" : "music_note"
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 18
+                                color: pItem.isActive
+                                    ? Theme.colors.on_primary_container
+                                    : Theme.colors.on_surface
                             }
-                            text: MediaPlayer.getIdentity(pItem.modelData)
-                            color: pItem.isActive
-                                ? Theme.colors.on_primary_container
-                                : Theme.colors.on_surface
-                            font.family: "Maple Mono NF CN"
-                            font.pixelSize: 12
-                            font.styleName: pItem.isActive ? "Bold" : "Medium"
-                            elide: Text.ElideRight
-                        }
-                        MouseArea {
-                            id: pItemHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                MediaPlayer.manualActive = pItem.modelData
-                                root.openMenu = ""
+                            Text {
+                                anchors {
+                                    left: pItemIcon.right; leftMargin: 8
+                                    right: parent.right; rightMargin: 10
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                text: {
+                                    const player = pItem.modelData
+                                    const identity = MediaPlayer.getIdentity(player)
+                                    const title = player.trackTitle
+                                    if (!title || (MediaPlayer.list.length < 2 && !player.tab)) return identity
+                                    return title + " · " + identity
+                                }
+                                color: pItem.isActive
+                                    ? Theme.colors.on_primary_container
+                                    : Theme.colors.on_surface
+                                font.family: "Maple Mono NF CN"
+                                font.pixelSize: 12
+                                font.styleName: pItem.isActive ? "Bold" : "Medium"
+                                elide: Text.ElideRight
+                            }
+                            MouseArea {
+                                id: pItemHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    MediaPlayer.selectPlayer(pItem.modelData)
+                                    root.openMenu = ""
+                                }
                             }
                         }
                     }

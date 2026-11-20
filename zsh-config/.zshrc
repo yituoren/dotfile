@@ -1,7 +1,7 @@
-# Apply matugen-generated terminal palette (直接读 colors.json,发 OSC 4/10/11/12)
-# Material You → ANSI 16 映射跟 ~/.dotfiles/scripts/setwall.sh 一致。
-# ★必须在 p10k instant prompt **之前**:instant prompt 会吞掉 .zshrc 期间的 stdout,
-#  放后面 kitty 收不到 OSC,颜色就要等下次 setwall 才对。
+# Apply the matugen terminal palette from colors.json with OSC 4/10/11/12.
+# Keep the Material You to ANSI 16 mapping in sync with ~/.dotfiles/scripts/setwall.sh.
+# Run before the p10k instant prompt, which captures stdout during .zshrc.
+#  Otherwise kitty misses the startup OSC sequences until the next setwall broadcast.
 () {
     local cf=~/.local/state/quickshell/user/generated/colors.json
     [[ -f $cf ]] && (( $+commands[jq] )) || return
@@ -21,8 +21,8 @@
         (.inverse_surface // .on_background)
     ' $cf)}" )
     # c[1]=bg c[2]=fg c[3]=cursor c[4..19]=ANSI 0..15
-    # ★ OSC 终止用 BEL(\a),不用 ST(ESC \) —— zsh 字符串拼接会吞末尾的 \,
-    #   导致前一段 OSC 没有合法终止,kitty 这种无 fallback 主题的终端就拿不到色
+    # Terminate OSC with BEL (\a). zsh string concatenation consumes the trailing backslash in ST (ESC backslash),
+    #   leaving the OSC unterminated and terminals such as kitty without a palette.
     local e=$'\033' s=$'\a' out= i
     for i in {0..15}; do out+="${e}]4;${i};${c[i+4]}${s}"; done
     out+="${e}]10;${c[2]}${s}${e}]11;${c[1]}${s}${e}]12;${c[3]}${s}"
@@ -196,5 +196,5 @@ stop_proxy() {
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 export PATH=$HOME/.local/bin:$PATH
 
-# `--icons` 必须带值,否则 _eza 补全会把后续路径当成 --icons 的取值,导致 TAB 路径补全失效
+# Use --icons=auto. A bare --icons makes _eza consume the next path as its value and breaks tab completion.
 alias ls='eza --icons=auto'

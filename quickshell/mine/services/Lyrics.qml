@@ -1,24 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-// Lyrics —— LRCLIB 歌词服务
-//
-// 监听 MediaPlayer.active 的 title/artist/album/length 变化,debounce 400ms 后
-// 调 lrclib.net REST API,返回 syncedLyrics 解 LRC 时间戳,
-// 暴露 prevLine / currentLine / nextLine 跟 active.position 联动。
-//
-// LRCLIB API(无鉴权):
-//   GET https://lrclib.net/api/get?track_name=&artist_name=&album_name=&duration=
-//   命中:200 + {syncedLyrics, plainLyrics, ...}
-//   未命中:404 + {code:404, name:"TrackNotFound"}
-//
-// status:
-//   "idle"     —— 无 active 或无 title
-//   "loading"  —— curl 正在跑
-//   "ok"       —— 拿到 syncedLyrics(有时间戳)
-//   "plain"    —— 只有 plainLyrics(无时间戳,不滚动,只整体显示)
-//   "miss"     —— 404 / 无歌词
-//   "error"    —— curl / JSON 失败
+// Read embedded MPRIS lyrics first, then query the public catalogues.
 
 import QtQuick
 import Quickshell
@@ -30,106 +13,113 @@ Singleton {
 
     readonly property var active: MediaPlayer.active
 
-    readonly property string trackTitle: root.active ? (root.active.trackTitle ?? "") : ""
-    readonly property string trackArtist: {
-        const a = root.active
-        if (!a) return ""
-        const arr = a.trackArtists ?? []
-        return arr.length > 0 ? arr[0] : ""
-    }
-    readonly property string trackAlbum: root.active ? (root.active.trackAlbum ?? "") : ""
-    readonly property real duration: root.active ? (root.active.length ?? 0) : 0
-    readonly property real position: root.active ? (root.active.position ?? 0) : 0
+    readonly property string trackTitle: MediaPlayer.trackTitle
+    readonly property string trackArtist: MediaPlayer.trackArtist
+    readonly property string trackAlbum: MediaPlayer.trackAlbum
+    readonly property real duration: MediaPlayer.duration
+    readonly property real position: MediaPlayer.position
 
-    // 解析后的歌词行 [{time: seconds, text: string}]
+    // Parsed lyric rows: [{time: seconds, text: string}]
     property var lines: []
     property string status: "idle"
     property string source: ""
 
-    // 当前 track signature,变了才重 fetch
-    property string sig: ""
-
-    onTrackTitleChanged: root.scheduleFetch()
-    onTrackArtistChanged: root.scheduleFetch()
-    onTrackAlbumChanged: root.scheduleFetch()
-    onDurationChanged: root.scheduleFetch()
+    readonly property string trackUrl: active?.metadata["xesam:url"] || ""
+    readonly property string supplied: active?.metadata["xesam:asText"] || ""
+    // Apple Music can publish its browser stream clock across track changes.
+    readonly property bool streamClock: /^https:\/\/music\.apple\.com(?:\/|$)/i.test(trackUrl)
+    readonly property int lookupDuration: streamClock ? 0 : Math.round(duration)
+    readonly property bool canSync: MediaPlayer.positionKnown
+    readonly property string signature: JSON.stringify([active?.dbusName || "", trackTitle, trackArtist, trackAlbum,
+        lookupDuration, trackUrl, active?.metadata["mpris:trackid"] || "", supplied])
+    property real catalogDuration: 0
+    property var pending: null
+    onSignatureChanged: scheduleFetch()
+    Component.onCompleted: scheduleFetch()
 
     function scheduleFetch(): void {
-        const newSig = root.trackTitle + "|" + root.trackArtist + "|" + root.trackAlbum
-        if (newSig === root.sig) return
-        root.sig = newSig
-        root.lines = []
-        root.source = ""
-        if (!root.trackTitle || !root.trackArtist) {
-            root.status = "idle"
-            debounce.stop()
+        debounce.stop()
+        catalogDuration = 0
+        if (pending) {
+            const previous = pending
+            pending = null
+            previous.running = false
+            previous.destroy()
+        }
+        lines = []
+        source = ""
+        if (/(?:[（(\[]|\s[-–—]\s)\s*(?:instrumental|off vocal|伴奏|纯音乐|純音樂)\s*(?:version|ver\.?|版)?\s*[）)\]]?\s*$/i.test(trackTitle)) {
+            status = "instrumental"
             return
         }
-        root.status = "loading"
-        debounce.restart()
+        if (supplied.trim()) {
+            const timed = parseLrc(supplied)
+            const rows = timed.length ? timed : supplied.split("\n").map(l => ({ time: -1, text: l }))
+            if (showLyrics(rows, timed.length ? "ok" : "plain", "MPRIS")) return
+        }
+        if (active && (trackTitle || trackUrl)) {
+            status = "loading"
+            debounce.restart()
+        } else status = "idle"
     }
 
     Timer {
         id: debounce
-        interval: 400
-        repeat: false
-        onTriggered: root.fetch()
+        interval: 120
+        onTriggered: {
+            const p = lookup.createObject(root, { command: ["/usr/bin/python", Quickshell.shellPath("scripts/media_lyrics.py"),
+                root.trackTitle, root.trackArtist, root.trackAlbum, String(root.lookupDuration), root.trackUrl] })
+            root.pending = p
+            p.running = true
+        }
     }
-
-    Process {
-        id: fetchProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const text = this.text || ""
-                if (text.length === 0) {
-                    root.status = "error"
-                    return
+    Component {
+        id: lookup
+        Process {
+            id: task
+            stdout: SplitParser {
+                onRead: line => {
+                    if (root.pending !== task) return
+                    try {
+                        const result = JSON.parse(line)
+                        if (Number.isFinite(result.duration) && result.duration > 0) root.catalogDuration = result.duration
+                        root.showLyrics(result.lines, result.status, result.source || "")
+                    } catch (_) { root.status = "error" }
                 }
-                try {
-                    const data = JSON.parse(text)
-                    if (data.code === 404 || (!data.syncedLyrics && !data.plainLyrics)) {
-                        root.status = "miss"
-                        root.lines = []
-                        return
-                    }
-                    if (data.syncedLyrics && data.syncedLyrics.length > 0) {
-                        root.lines = root.parseLrc(data.syncedLyrics)
-                        root.status = root.lines.length > 0 ? "ok" : "miss"
-                        root.source = "lrclib"
-                    } else if (data.plainLyrics && data.plainLyrics.length > 0) {
-                        // 无时间戳,造一个伪 line 数组(time=-1)只为整体展示
-                        root.lines = data.plainLyrics.split("\n")
-                            .filter(l => l.trim().length > 0)
-                            .map(l => ({ time: -1, text: l }))
-                        root.status = "plain"
-                        root.source = "lrclib"
-                    } else {
-                        root.status = "miss"
-                    }
-                } catch (e) {
-                    console.warn("Lyrics: JSON parse failed", e, text.substring(0, 120))
-                    root.status = "error"
-                }
+            }
+            onExited: {
+                if (root.pending !== task) return
+                if (root.status === "loading") root.status = "error"
+                root.pending = null
+                destroy()
             }
         }
     }
 
-    function fetch(): void {
-        if (!root.trackTitle || !root.trackArtist) {
-            root.status = "idle"
-            return
+    // Apply the same display rules to embedded lyrics, catalogue results and cached tracks.
+    function showLyrics(rows, kind, provider): bool {
+        const creditRole = /^(?:作[词詞曲]人?|[词詞]曲?|曲|[编編]曲|[製制]作人|填[词詞]|混音|母[带帶]|[录錄]音|演唱|歌手|[专專][辑輯]|lyrics?|music|composer|lyricist|producer|arranger)$/i
+        const byline = /^(?:lyrics(?:\s+(?:and|&)\s+music)?|music|written|composed|arranged|produced)\s+by(?:\s*[:：]|\s+)/i
+        const instrumental = /^(?:此歌曲为没有填词的)?(?:纯音乐|純音樂|纯伴奏|純伴奏|伴奏|instrumental(?: version)?|无歌词|無歌詞)(?:\s*[,，。！!·-]?\s*(?:请您?欣赏|請您?欣賞))?[。.!！]?$/i
+        let markedInstrumental = kind === "instrumental"
+        const words = []
+        for (const row of rows) {
+            const text = row.text.trim()
+            const label = text.replace(/^[\[【（(]\s*|\s*[\]】）)]$/g, "")
+            if (instrumental.test(label)) { markedInstrumental = true; continue }
+            const colon = label.search(/[:：]/)
+            const credit = colon > 0 && label.slice(0, colon).split(/[/／、&和・]/).every(role => creditRole.test(role.trim()))
+            if (/^\[(?:intro|verse|pre-chorus|chorus|bridge|outro)(?:\s+\d+)?\]$/i.test(text)) continue
+            if (!text || credit || byline.test(label) || /^\[(?:ar|al|ti|au|by|offset|re|ve|length):/i.test(text)) continue
+            words.push(row)
         }
-        const params = []
-        params.push("track_name=" + encodeURIComponent(root.trackTitle))
-        params.push("artist_name=" + encodeURIComponent(root.trackArtist))
-        if (root.trackAlbum) params.push("album_name=" + encodeURIComponent(root.trackAlbum))
-        if (root.duration > 0) params.push("duration=" + Math.round(root.duration))
-        const url = "https://lrclib.net/api/get?" + params.join("&")
-        fetchProc.command = ["curl", "-fsSL", "--max-time", "8",
-            "-A", "qs-mine-lyrics/0.1 (https://github.com/yituoren/dotfiles)", url]
-        fetchProc.running = true
+        lines = words
+        source = provider
+        status = kind
+        if (!words.length && (kind === "ok" || kind === "plain"))
+            status = markedInstrumental ? "instrumental" : "miss"
+        return words.length > 0 || markedInstrumental
     }
-
     function parseLrc(text: string): var {
         const out = []
         const lines = text.split("\n")
@@ -144,7 +134,7 @@ Singleton {
                 const min = parseInt(m[1], 10)
                 const sec = parseInt(m[2], 10)
                 const fracStr = m[3] ?? ""
-                const frac = fracStr ? parseInt(fracStr.padEnd(3, "0"), 10) / 1000 : 0
+                const frac = fracStr ? Number("0." + fracStr) : 0
                 stamps.push(min * 60 + sec + frac)
                 lastIdx = m.index + m[0].length
             }
@@ -158,11 +148,11 @@ Singleton {
         return out
     }
 
-    // 二分查找当前行(time <= position 的最大 index)
+    // Find the last line with a timestamp at or before the current playback position.
     readonly property int currentIndex: {
         const n = root.lines.length
         if (n === 0) return -1
-        // plain 模式 time=-1,直接返回 -1(没有"当前一行"的概念)
+        // Untimed lyrics use time = -1 and have no current line.
         if (root.lines[0].time < 0) return -1
         const p = root.position
         let lo = 0, hi = n - 1, ans = -1

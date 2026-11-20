@@ -19,9 +19,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 invertedOuter;
     vec4 invertedInner;
     vec4 rectData[80];
-    // 顶 → 底渐变(只取 pixel.y 维度);gradTop/Bot 在屏幕本地像素坐标里
-    // colorBottom.a < 1 可以让底部 SDF 半透,配合 niri layer-rule background-effect blur 让背后糊掉
-    // gradBottom <= gradTop → t 退化为 0,整体走 color(不渐变)
+    // Vertical gradient in surface-local pixel coordinates.
+    // A translucent colorBottom lets the compositor's layer blur show through the SDF fill.
+    // When gradBottom <= gradTop, use t = 0 for a solid fill.
     vec4 colorBottom;
     float gradientTop;
     float gradientBottom;
@@ -254,12 +254,12 @@ void main() {
     float fw = fwidth(mergedSdf);
     float alpha = 1.0 - smoothstep(-fw, fw, mergedSdf);
 
-    // 顶 → 底渐变(沿 pixel.y);gradient 区间外 clamp 到 0/1
+    // Clamp the vertical gradient to its endpoint colors outside the interval.
     float t = 0.0;
     if (gradientBottom > gradientTop) {
         t = clamp((pixel.y - gradientTop) / (gradientBottom - gradientTop), 0.0, 1.0);
     }
     vec4 finalColor = mix(color, colorBottom, t);
-    // 渐变颜色自带的 alpha 跟 SDF 抗锯齿 alpha 相乘;rgb 走预乘
+    // Multiply the gradient alpha by SDF coverage, then premultiply RGB.
     fragColor = vec4(finalColor.rgb * alpha * finalColor.a, alpha * finalColor.a) * qt_Opacity;
 }

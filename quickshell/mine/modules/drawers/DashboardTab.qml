@@ -2,24 +2,26 @@ pragma ComponentBehavior: Bound
 
 // DashboardTab —— dashboard "Dashboard" tab
 //
-// 布局:
-//   左 ~45% : 时间块(上)+ 双切换 pill(Notifications / Todo)+ 列表(下)
-//             - Notifications 模式:Notifications.history,可点展开 / X 单条 / Clear all
-//             - Todo 模式:Tasks.tasksOn(selectedDate),checkbox 完成 / X 删除 / 底部 add 输入框
-//   右 ~55% : Calendar 独占,点格子选 selectedDate(联动左侧 Todo 模式)
+// Layout:
+//   Left (~45%): clock, Notifications/Todo selector and list.
+//             - Notifications.history supports expansion, individual dismissal and Clear all.
+//             - Tasks.tasksOn(selectedDate) supports completion, deletion and entry below the list.
+//   Right (~55%): selecting a calendar date also updates the task list.
 //
-// activeList 状态:"notif" | "todo",默认 "notif"
+// activeList is either "notif" (default) or "todo".
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
+import qs.modules.drawers
 import qs.services
 
 Item {
     id: root
 
+    readonly property int footerHeight: 44
     property date viewDate: new Date()
     property date selectedDate: new Date()
     property string activeList: "notif"   // "notif" | "todo"
@@ -54,7 +56,7 @@ Item {
         anchors.bottomMargin: 24
         spacing: 24
 
-        // ╔══════════════════ 左半(~45%) ══════════════════╗
+        // ================== Left column (~45%) ==================
         ColumnLayout {
             Layout.fillHeight: true
             Layout.preferredWidth: parent.width * 0.45
@@ -100,8 +102,8 @@ Item {
                 }
             }
 
-            // ─── 切换开关 ───
-            // 两个 pill 并排,带动画滑动的高亮底
+            // ---- View selector ----
+            // Two adjacent pills share a sliding highlight.
             Rectangle {
                 id: switcher
                 Layout.fillWidth: true
@@ -111,7 +113,7 @@ Item {
 
                 readonly property real cellW: width / 2
 
-                // 滑动 highlight
+                // Sliding highlight
                 Rectangle {
                     width: switcher.cellW
                     height: parent.height
@@ -129,6 +131,7 @@ Item {
                             { key: "todo",  label: "Todo",          icon: "task_alt",      count: root.todayTasks.length }
                         ]
                         delegate: Item {
+                            id: listTab
                             required property var modelData
                             required property int index
                             readonly property bool isActive: root.activeList === modelData.key
@@ -171,7 +174,7 @@ Item {
                                     Text {
                                         id: countLabel
                                         anchors.centerIn: parent
-                                        text: parent.parent.modelData.count
+                                        text: listTab.modelData.count
                                         color: parent.parent.parent.isActive
                                             ? Theme.colors.on_primary_container
                                             : Theme.colors.on_surface_variant
@@ -192,8 +195,8 @@ Item {
                 }
             }
 
-            // ─── 列表区 ───
-            // notif / todo 两套 UI 用 Loader + 滑动横向切换;active 变化时 opacity 渐变
+            // ---- List area ----
+            // Load the notification or task list and transition horizontally with a fade.
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -205,7 +208,7 @@ Item {
                     opacity: visible ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 180 } }
 
-                    // 顶上一行 "Clear all"
+                    // Clear all action above the list
                     Item {
                         id: notifHeader
                         anchors.top: parent.top
@@ -238,7 +241,7 @@ Item {
                         }
                     }
 
-                    // 空状态
+                    // Empty state
                     Column {
                         anchors.centerIn: parent
                         spacing: 6
@@ -412,7 +415,7 @@ Item {
                     opacity: visible ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 180 } }
 
-                    // 顶部右上一个日期标签(不是 today 时显示选中日期)
+                    // Show the selected date at the upper right when viewing another day.
                     Item {
                         id: todoHeader
                         anchors.top: parent.top
@@ -437,7 +440,7 @@ Item {
                         }
                     }
 
-                    // 空状态
+                    // Empty state
                     Column {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -16
@@ -624,6 +627,75 @@ Item {
                     }
                 }
             }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.footerHeight
+                radius: 12
+                color: Qt.rgba(1, 1, 1, 0.06)
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 8
+                    spacing: 8
+                    Text {
+                        text: "music_note"
+                        font.family: "Material Symbols Rounded"
+                        font.pixelSize: 21
+                        color: Theme.colors.primary
+                    }
+                    Column {
+                        Layout.fillWidth: true
+                        Text {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: MediaPlayer.trackTitle || MediaPlayer.getIdentity(MediaPlayer.active) || "No media"
+                            color: Theme.colors.on_surface
+                            font.family: "Maple Mono NF CN"
+                            font.pixelSize: 12
+                        }
+                        Text {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: MediaPlayer.trackArtist
+                            visible: text.length > 0
+                            color: Theme.colors.on_surface_variant
+                            font.family: "Maple Mono NF CN"
+                            font.pixelSize: 10
+                        }
+                    }
+                    Repeater {
+                        model: ["previous", "play", "next"]
+                        delegate: ToolButton {
+                            required property string modelData
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 32
+                            enabled: modelData === "play" ? !!MediaPlayer.playPausePlayer
+                                   : modelData === "next" ? !!MediaPlayer.nextPlayer
+                                   : !!MediaPlayer.previousPlayer
+                            Accessible.name: modelData === "play" && MediaPlayer.active?.isPlaying ? "Pause" : modelData
+                            contentItem: Text {
+                                text: parent.modelData === "previous" ? "skip_previous"
+                                    : parent.modelData === "next" ? "skip_next"
+                                    : MediaPlayer.active?.isPlaying ? "pause" : "play_arrow"
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 22
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                color: Theme.colors.on_surface
+                                opacity: parent.enabled ? 1 : 0.3
+                            }
+                            background: null
+                            onClicked: {
+                                if (modelData === "play") MediaPlayer.playPausePlayer?.togglePlaying()
+                                else if (modelData === "next") MediaPlayer.nextPlayer?.next()
+                                else MediaPlayer.previousPlayer?.previous()
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -634,7 +706,7 @@ Item {
             color: Qt.rgba(1, 1, 1, 0.08)
         }
 
-        // ╔══════════════════ 右半(~55%):Calendar 独占 ══════════════════╗
+        // ================== Right calendar column (~55%) ==================
         ColumnLayout {
             Layout.fillHeight: true
             Layout.fillWidth: true
@@ -719,7 +791,8 @@ Item {
             }
 
             RowLayout {
-                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: dayGrid.cellW * 7
                 Layout.preferredHeight: 22
                 spacing: 0
                 Repeater {
@@ -741,84 +814,92 @@ Item {
                 }
             }
 
-            Grid {
-                id: dayGrid
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                columns: 7
-                rows: 6
-                readonly property real cellW: width / 7
-                readonly property real cellH: height / 6
-                readonly property date start: root.gridStart(root.viewDate)
 
-                Repeater {
-                    model: 42
-                    delegate: Item {
-                        required property int index
-                        width: dayGrid.cellW
-                        height: dayGrid.cellH
+                Grid {
+                    id: dayGrid
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    columns: 7
+                    rows: 6
+                    readonly property real cellW: Math.min(parent.width / 7, parent.height / 6)
+                    readonly property date start: root.gridStart(root.viewDate)
 
-                        readonly property date cellDate: new Date(
-                            dayGrid.start.getFullYear(),
-                            dayGrid.start.getMonth(),
-                            dayGrid.start.getDate() + index)
-                        readonly property bool inMonth: cellDate.getMonth() === root.viewDate.getMonth()
-                        readonly property bool isToday: root.sameDay(cellDate, new Date())
-                        readonly property bool isSelected: root.sameDay(cellDate, root.selectedDate)
-                        readonly property int taskCount: Tasks.countOn(cellDate)
+                    Repeater {
+                        model: 42
+                        delegate: Item {
+                            required property int index
+                            width: dayGrid.cellW
+                            height: dayGrid.cellW
 
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width, parent.height) - 6
-                            height: width
-                            radius: width / 2
-                            color: parent.isSelected
-                                ? Theme.colors.primary
-                                : (parent.isToday ? Qt.rgba(1, 1, 1, 0.08) : (cellHoverMa.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent"))
-                            border.color: parent.isToday && !parent.isSelected
-                                ? Theme.colors.primary
-                                : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 140 } }
-                        }
+                            readonly property date cellDate: new Date(
+                                dayGrid.start.getFullYear(),
+                                dayGrid.start.getMonth(),
+                                dayGrid.start.getDate() + index)
+                            readonly property bool inMonth: cellDate.getMonth() === root.viewDate.getMonth()
+                            readonly property bool isToday: root.sameDay(cellDate, new Date())
+                            readonly property bool isSelected: root.sameDay(cellDate, root.selectedDate)
+                            readonly property int taskCount: Tasks.countOn(cellDate)
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: parent.cellDate.getDate()
-                            color: parent.isSelected
-                                ? Theme.colors.on_primary
-                                : (parent.inMonth ? Theme.colors.on_surface : Theme.colors.on_surface_variant)
-                            opacity: parent.inMonth ? 1.0 : 0.35
-                            font.family: "Maple Mono NF CN"
-                            font.pixelSize: 14
-                            font.styleName: parent.isSelected || parent.isToday ? "ExtraBold" : "Medium"
-                        }
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width, parent.height) - 6
+                                height: width
+                                radius: width / 2
+                                color: parent.isSelected
+                                    ? Theme.colors.primary
+                                    : (parent.isToday ? Qt.rgba(1, 1, 1, 0.08) : (cellHoverMa.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent"))
+                                border.color: parent.isToday && !parent.isSelected
+                                    ? Theme.colors.primary
+                                    : "transparent"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 140 } }
+                            }
 
-                        Rectangle {
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.rightMargin: 6
-                            anchors.bottomMargin: 6
-                            width: 5
-                            height: 5
-                            radius: 2.5
-                            visible: parent.taskCount > 0 && !parent.isSelected
-                            color: Theme.colors.primary
-                        }
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.cellDate.getDate()
+                                color: parent.isSelected
+                                    ? Theme.colors.on_primary
+                                    : (parent.inMonth ? Theme.colors.on_surface : Theme.colors.on_surface_variant)
+                                opacity: parent.inMonth ? 1.0 : 0.35
+                                font.family: "Maple Mono NF CN"
+                                font.pixelSize: 14
+                                font.styleName: parent.isSelected || parent.isToday ? "ExtraBold" : "Medium"
+                            }
 
-                        MouseArea {
-                            id: cellHoverMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.selectedDate = parent.cellDate
-                                // 点格子顺便切到 Todo 视图,方便看那天有什么 task
-                                if (parent.taskCount > 0) root.activeList = "todo"
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.rightMargin: 6
+                                anchors.bottomMargin: 6
+                                width: 5
+                                height: 5
+                                radius: 2.5
+                                visible: parent.taskCount > 0 && !parent.isSelected
+                                color: Theme.colors.primary
+                            }
+
+                            MouseArea {
+                                id: cellHoverMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.selectedDate = parent.cellDate
+                                    // Selecting a date also opens its tasks.
+                                    if (parent.taskCount > 0) root.activeList = "todo"
+                                }
                             }
                         }
                     }
                 }
+            }
+
+            AppSearch {
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.footerHeight
             }
         }
     }

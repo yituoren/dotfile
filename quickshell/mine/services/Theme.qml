@@ -1,16 +1,16 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-// Theme.qml —— matugen 颜色单例
+// Shared matugen palette
 //
-// 设计取舍:不再用 FileView.watchChanges(matugen 原子写换 inode,
-// quickshell 在某些版本下 watch 失效)。改用 Process 直接读 + IPC 显式触发:
-//   - 启动时 Process 跑一次,加载 colors.json
-//   - setwall 在 matugen 跑完后调 `qs -c mine ipc call theme reload`,
-//     这边重新跑 Process,更新 root.colors,所有 binding 自动刷新。
+// matugen replaces the file atomically, which can leave FileView.watchChanges
+// watching the old inode. Read through a process and refresh explicitly over IPC.
+//   - Load colors.json once at startup.
+//   - After matugen finishes, setwall calls qs -c mine ipc call theme reload.
+//     Run the reader again and replace root.colors so all bindings update.
 //
-// 访问:Theme.colors.primary / Theme.colors.on_background / ...
-// 命名跟 matugen 的 snake_case 保持一致,也避开 QML "on<Cap>" 命名禁忌。
+// Access tokens as Theme.colors.primary, Theme.colors.on_background and so on.
+// Keep matugen's snake_case keys to avoid QML's reserved on<Capital> handler syntax.
 
 import QtQuick
 import Quickshell
@@ -19,10 +19,12 @@ import Quickshell.Io
 Singleton {
     id: root
 
+    readonly property real uiScale: 1.2
+
     readonly property string colorsFile:
         Quickshell.env("HOME") + "/.local/state/quickshell/user/generated/colors.json"
 
-    // 默认 fallback,文件读不到时不至于整片黑
+    // Use fallback colors when the file cannot be read.
     property var colors: ({
         background: "#101418",
         on_background: "#e0e2e8",
@@ -98,10 +100,10 @@ Singleton {
         }
     }
 
-    // 启动时拉一次
+    // Load once at startup.
     Component.onCompleted: root.reload()
 
-    // setwall 用:`qs -c mine ipc call theme reload`
+    // Entry point for setwall: qs -c mine ipc call theme reload
     IpcHandler {
         target: "theme"
         function reload(): void { root.reload() }

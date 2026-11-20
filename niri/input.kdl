@@ -1,14 +1,14 @@
-// 输入设备
+// Input devices
 
 input {
     keyboard {
         xkb {
             layout "us"
         }
-        // 对应 repeat_delay / repeat_rate
+        // Equivalent to repeat_delay and repeat_rate
         repeat-delay 250
         repeat-rate 35
-        // 对应 numlock_by_default
+        // Equivalent to numlock_by_default
         numlock
     }
 

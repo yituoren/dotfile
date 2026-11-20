@@ -5,13 +5,9 @@ version_check = false
 input_path = '~/.config/matugen/templates/colors.json'
 output_path = '~/.local/state/quickshell/user/generated/colors.json'
 
-[templates.hyprland]
-input_path = '~/.config/matugen/templates/hyprland/colors.conf'
-output_path = '~/.config/hypr/hyprland/colors.conf'
-
-[templates.hyprlock]
-input_path = '~/.config/matugen/templates/hyprland/hyprlock-colors.conf'
-output_path = '~/.config/hypr/hyprlock/colors.conf'
+[templates.chat]
+input_path = '~/.config/matugen/templates/quickshell/chat.css'
+output_path = '~/.config/quickshell/mine/chat/chat.css'
 
 [templates.fuzzel]
 input_path = '~/.config/matugen/templates/fuzzel/fuzzel_theme.ini'
@@ -29,12 +25,10 @@ output_path = '~/.config/gtk-4.0/gtk.css'
 input_path = '~/.config/matugen/templates/kde/color.txt'
 output_path = '~/.local/state/quickshell/user/generated/color.txt'
 
+[templates.kde_scheme]
+input_path = '~/.config/matugen/templates/kde/MineDesktop.colors'
+output_path = '~/.local/share/color-schemes/MineDesktop.colors'
+
 [templates.wallpaper]
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
-
-# [templates.zed] 暂禁 —— 模板文件 templates/zed/matugen.json 不存在,
-# 留着会让 matugen 4.x 整次运行 abort。等你做 matugen→zed 主题同步时再恢复。
-# [templates.zed]
-# input_path = '~/.config/matugen/templates/zed/matugen.json'
-# output_path = '~/.config/zed/themes/matugen.json'

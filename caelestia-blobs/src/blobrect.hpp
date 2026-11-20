@@ -4,12 +4,15 @@
 
 #include <qelapsedtimer.h>
 #include <qpointer.h>
+#include <qvariant.h>
 #include <qqmlengine.h>
 #include <qqmllist.h>
 
 class BlobRect : public BlobShape {
     Q_OBJECT
     QML_ELEMENT
+    Q_PROPERTY(bool trackBlur READ trackBlur WRITE setTrackBlur NOTIFY trackBlurChanged)
+    Q_PROPERTY(QVariantList blurRects READ blurRects NOTIFY blurRectsChanged)
     Q_PROPERTY(qreal stiffness READ stiffness WRITE setStiffness NOTIFY stiffnessChanged)
     Q_PROPERTY(qreal damping READ damping WRITE setDamping NOTIFY dampingChanged)
     Q_PROPERTY(qreal deformScale READ deformScale WRITE setDeformScale NOTIFY deformScaleChanged)
@@ -23,6 +26,10 @@ class BlobRect : public BlobShape {
 public:
     explicit BlobRect(QQuickItem* parent = nullptr);
     ~BlobRect() override;
+
+    bool trackBlur() const { return m_trackBlur; }
+    void setTrackBlur(bool enabled);
+    QVariantList blurRects() const { return m_blurRects; }
 
     qreal stiffness() const { return m_stiffness; }
 
@@ -73,6 +80,8 @@ public:
     void setBottomRightRadius(qreal r);
 
 signals:
+    void trackBlurChanged();
+    void blurRectsChanged();
     void stiffnessChanged();
     void dampingChanged();
     void deformScaleChanged();
@@ -87,6 +96,9 @@ protected:
     void updatePhysics() override;
 
 private:
+    void updateBlurRects();
+    bool m_trackBlur = false;
+    QVariantList m_blurRects;
     void checkAtRest(float speed);
 
     // Physics state

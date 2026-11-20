@@ -1,10 +1,7 @@
-// 窗口规则 / 图层规则
-// 对应 hypr/hyprland/rules.conf + hypr/custom/rules.conf
-// ★ 已大幅精简:原 rules.conf 约 80 行 → 这里 ~3 条 window-rule。
+// Window and layer rules
 
-// 圆角 + 窗口模糊 —— 对应 decoration { rounding = 18 } 和 custom/rules.conf 的 no_blur off
-// 无 match 的 window-rule 作用到所有窗口。
-// background-effect 让所有半透明窗口背后模糊(模糊跟随 geometry-corner-radius 圆角)。
+// A window-rule without a match applies to every window.
+// Translucent windows show the blurred background clipped to geometry-corner-radius.
 window-rule {
     geometry-corner-radius 18
     clip-to-geometry true
@@ -13,7 +10,7 @@ window-rule {
     }
 }
 
-// 浮动:设置类小窗口(对应原 pavucontrol / nm-connection-editor / blueberry 规则)
+// Float small settings windows, including pavucontrol, nm-connection-editor and blueberry.
 window-rule {
     match app-id="pavucontrol"
     match app-id="org.pulseaudio.pavucontrol"
@@ -22,32 +19,41 @@ window-rule {
     open-floating true
 }
 
-// 画中画:浮动并固定在右下角(对应原 Picture-in-Picture 规则)
+// Float the external Chrome chat window opened from the chat toolbar.
+window-rule {
+    match app-id=r#"^chrome-chatgpt\.com__-.+$"#
+    open-floating true
+    default-column-width { fixed 560; }
+    default-window-height { proportion 0.78; }
+    // 61 px to the bottom of the bar plus an 8 px gap.
+    default-floating-position x=8 y=69 relative-to="top-left"
+}
+
+// Float picture-in-picture windows in the lower-right corner.
 window-rule {
     match title="^Picture[-\\s]?in[-\\s]?Picture$"
     open-floating true
     default-floating-position x=32 y=32 relative-to="bottom-right"
 }
 
-// 文件对话框浮动 —— Open File / Save As / ... 的 float 规则
-// 两种匹配方式:
-//   1) app-id:走 xdg-desktop-portal 的文件选择器(现代应用大多如此),
-//      整个对话框是 portal 的独立窗口,app-id 固定。
-//   2) title:应用自己画的 GTK/Qt 文件选择子窗口,app-id 跟父应用一样,
-//      只能靠标题认。标题区分大小写、按正则匹配。
+// Float file dialogs such as Open File and Save As.
+// Match dialogs in two ways:
+//   1. Portal file choosers run in separate windows
+//      with the portal backend's app ID.
+//   2. In-process GTK/Qt dialogs share their parent application's ID.
+//      Match these by title using case-sensitive regular expressions.
 //
-// ★ 下面的 app-id / title 都是按惯例推测,不保证与实际一致(标题还跟系统语言走)。
-//   进 niri 后把对话框打开着,运行 `niri msg windows` 查窗口真实的 app-id/title,
-//   再回来订正这条规则。
+// These IDs and titles follow common conventions. Titles also depend on the system language.
+//   With the dialog open, run niri msg windows to inspect its app ID and title,
+//   then adjust the match if necessary.
 window-rule {
-    // 方式 1:portal 文件选择器
-    // KDE 后端 —— 已由 ii 原 rules.conf 验证(ii 用的就是这个)
+    // Portal file choosers
     match app-id="org.freedesktop.impl.portal.desktop.kde"
-    // GTK / GNOME 后端 —— 按 KDE 的命名类推,未亲自验证
+    // GTK/GNOME backend IDs follow the KDE naming convention and have not been verified.
     match app-id="org.freedesktop.impl.portal.desktop.gtk"
     match app-id="org.freedesktop.impl.portal.desktop.gnome"
 
-    // 方式 2:按对话框标题
+    // Match by dialog title.
     match title="^Open File"
     match title="^Open Files"
     match title="^Open Folder"
@@ -64,13 +70,13 @@ window-rule {
 }
 
 // ============================================================
-// 图层规则
+// Layer rules
 // ============================================================
 
-// fuzzel 启动器:背景模糊
-// fuzzel 用的 layer-shell namespace 就叫 "launcher"(写死在源码里)
-// geometry-corner-radius 要跟 fuzzel.ini 里 [border] radius 一致,
-// 不然 niri 把模糊画到矩形边界,会在圆角外露出彩色直角
+// Blur the background behind fuzzel.
+// Fuzzel publishes the layer-shell namespace launcher.
+// Match geometry-corner-radius to [border] radius in fuzzel.ini
+// to keep the rectangular blur from showing outside the rounded corners.
 layer-rule {
     match namespace="^launcher$"
     geometry-corner-radius 17
@@ -79,23 +85,19 @@ layer-rule {
     }
 }
 
-// 自建 qs shell:全屏 ContentWindow,namespace = `mine-shell`
-// 不设 blur / corner-radius —— Blob SDF 自己渲染形状(包括圆角),niri 别插手
-// 注意 ★ 不要给这个 layer 加 background-effect blur:mine-shell 是全屏 PanelWindow,
-//   bar/popup 之外全是 RGBA 透明像素,niri 的 blur 会把整屏 wallpaper + 窗口糊一遍
+// The custom fullscreen ContentWindow uses the mine-shell namespace.
+// The SDF draws the shape and rounded corners itself.
+// The client supplies the animated blur region. Transparent pixels outside the bar
+// and popups would otherwise receive blur across the entire output.
 layer-rule {
     match namespace="^mine-shell$"
+    background-effect {
+        xray false
+    }
 }
 
-// BlurPanel:专门做 dashboard popup 模糊的小 layer,只覆盖 popup 几何。
-// niri 的 background-effect blur 在 layer-shell 上只采到 background 层(壁纸),
-// 看不到正常窗口 —— xray 在我们这版 niri 上也不生效;这里只能糊壁纸,可接受。
-// geometry-corner-radius 16:跟 ContentWindow.barRadius 一致,blur 矩形切成圆角 popup 形,
-// 跟 SDF popup 完全贴合,边缘不会露出方角 blur
+// The chat panel has its own Quickshell layer surface.
 layer-rule {
-    match namespace="^mine-blur$"
-    geometry-corner-radius 16
-    background-effect {
-        blur true
-    }
+    match namespace="^mine-chat$"
+    geometry-corner-radius 18
 }

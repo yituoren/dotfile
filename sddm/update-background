@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Publish the blurred image first, then atomically select it with its matching palette.
+set -euo pipefail
+image=${1:?expected a wallpaper path}
+dest=${2:-/var/lib/mine-greeter}
+palette="$HOME/.local/state/quickshell/user/generated/colors.json"
+exec 9<"$dest"
+flock -x 9
+work=$(mktemp -d -- "$dest/.update.XXXXXXXX")
+trap 'rm -r -- "$work"' EXIT
+slot=a
+if [[ -f "$dest/theme.conf.user" ]] && grep -Fxq wallpaper=a.jpg "$dest/theme.conf.user"; then slot=b; fi
+magick "${image}[0]" -auto-orient -thumbnail '1152x1152>' -virtual-pixel edge \
+    -blur 0x10 -strip -quality 90 "$work/background.jpg"
+jq -er --arg name "$slot.jpg" '
+    ["surface","surface_container","surface_container_high","on_surface","on_surface_variant",
+     "primary","on_primary","outline_variant","error"] as $keys |
+    ["[General]", "wallpaper="+$name, ($keys[] as $k |
+        if (.[$k] | type == "string" and test("^#[0-9a-fA-F]{6}$"))
+        then $k+"="+.[$k] else error("missing color: "+$k) end)] | .[]
+' "$palette" > "$work/theme.conf.user"
+chmod 0644 "$work/background.jpg" "$work/theme.conf.user"
+mv -fT -- "$work/background.jpg" "$dest/$slot.jpg"
+mv -fT -- "$work/theme.conf.user" "$dest/theme.conf.user"

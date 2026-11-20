@@ -1,8 +1,8 @@
 pragma ComponentBehavior: Bound
 
-// SystemTrayIndicator —— 聚合的系统托盘入口
-// 点击展开 tray popup,里面列出所有 SNI items(clash-verge / fcitx5 / 等等)
-// 单独显示一个 "apps" 通用图标,不展开所有 tray icon —— bar 干净
+// Single entry point for the system tray.
+// Open a popup listing StatusNotifierItems such as Clash Verge and Fcitx5.
+// One apps glyph represents all tray icons on the bar.
 
 import QtQuick
 import Quickshell.Services.SystemTray
@@ -17,7 +17,7 @@ Text {
     font.pixelSize: 20
     width: 22
     horizontalAlignment: Text.AlignHCenter
-    // 没 tray item 时灰一点
+    // Dim the icon when the tray is empty.
     color: SystemTray.items.values.length > 0 ? Theme.colors.on_surface
                                                : Theme.colors.on_surface_variant
     opacity: SystemTray.items.values.length > 0 ? 1 : 0.6

@@ -1,28 +1,53 @@
 //@ pragma UseQApplication
 //@ pragma Env QS_NO_RELOAD_POPUP=1
 
-// shell.qml —— 入口。Caelestia 风格:每屏一个 ContentWindow,内含 bar + popup
-// (SDF blob 融合要求 bar/popup 在同一 scene graph)
+// Shell entry point. Each output has a Caelestia-style ContentWindow for the bar and popups.
+// The shared prompt handles keyboard help and session confirmations on the active output.
 
+import QtQuick
 import Quickshell
 import Quickshell.Io
-import Caelestia.Blobs  // 自己编译的 SDF blob plugin (~/.local/share/qt6/qml/Caelestia/Blobs/)
+import Caelestia.Blobs  // User-built SDF plugin in ~/.local/share/qt6/qml/Caelestia/Blobs/
 import qs.modules.drawers
 import qs.modules.bar.widgets
 import qs.services
 
 ShellRoot {
-    // BlurPanel —— popup 底下的模糊层(每屏一个),niri 给它单独 blur
-    // 注意:必须先创建 BlurPanel(Top 层),再创建 ContentWindow(Overlay 层),
-    // 保证 ContentWindow 渲染在上,BlurPanel 在下,SDF 半透时能透出 blur 画面
-    Variants {
-        model: Quickshell.screens
-        BlurPanel {}
+    id: shell
+    function focusedScreen(): var {
+        const ws = Niri.workspaces.find(w => w.id === Niri.activeWorkspaceId)
+        return Quickshell.screens.find(s => s.name === ws?.output) ?? Quickshell.screens[0]
+    }
+    DesktopPrompt { id: prompt }
+
+    // Prefetch weather and warm up the Cloud page before the panel first opens.
+    Component.onCompleted: {
+        Weather.refresh()
+        Chat.ensureHost()
     }
 
     Variants {
         model: Quickshell.screens
-        ContentWindow {}
+        ContentWindow {
+            onLogoutRequested: prompt.show("logout", modelData)
+        }
+    }
+
+    IpcHandler {
+        target: "power"
+        function toggle(): void {
+            const screen = shell.focusedScreen()
+            if (screen) PopupManager.toggle("power", screen, screen.width)
+        }
+    }
+
+    IpcHandler {
+        target: "desktop"
+        function shortcuts(): void {
+            if (prompt.opened && prompt.helpPage) prompt.close()
+            else prompt.show("shortcuts", shell.focusedScreen())
+        }
+        function logout(): void { prompt.show("logout", shell.focusedScreen()) }
     }
 
     IpcHandler {

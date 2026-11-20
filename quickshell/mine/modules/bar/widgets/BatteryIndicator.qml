@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
-// BatteryIndicator —— 只显示图标(百分比留给 popup);点击展开 battery popup
-// 低于 15% 且非充电状态时变 error 色
+// The battery icon opens the popup, which also shows the percentage.
+// Use the error color below 15% when discharging.
 
 import QtQuick
 import qs.services

@@ -2,16 +2,16 @@ pragma ComponentBehavior: Bound
 
 // ControlTab —— dashboard "Control" tab
 //
-// btop 风格,严格写死位置,纯主题色。size 为 popup 600 高(content 520)优化,
-// 上下、左右、各 section 之间 padding 16 统一:
+// The btop-style panel uses fixed positions and theme colors. Dimensions target a 600 px popup
+// with 520 px of content and 16 px of padding between sections.
 //
 //   y 16-44     header strip       h 28    uptime / load / CPU temp
-//   y 60-244    metric rows        h 184   3 行 × 60 + 2 × 4 gap,2 列
-//   y 260-360   graph CPU/GPU      h 100   左右各 390 宽
-//   y 376-496   Network 段         h 120   ↓ + ↑ 各 42 高带曲线
+//   y 60-244: two columns of three 60 px metric rows with two 4 px gaps (184 px total).
+//   y 260-360: CPU and GPU charts, each 390 px wide and 100 px tall.
+//   y 376-496: network section with two 42 px throughput plots.
 //
-// 坐标系:popup 内容宽 860,左右 28 padding → 内容宽 804
-//         左列 x 28  右列 x 442  各 w 390  列间隔 24
+// An 860 px content area with 28 px side margins leaves 804 px.
+//         Columns start at x = 28 and 442, each 390 px wide with a 24 px gap.
 
 import QtQuick
 import qs.services
@@ -25,7 +25,7 @@ Item {
     readonly property bool hasData:
         SysMonitor.cpuPerCore.length > 0 || SysMonitor.memTotalGB > 0
 
-    // ═══════════════ 文本工具 ═══════════════
+    // =============== Text helpers ===============
     function shortCpu(s: string): string {
         return s.replace(/\(R\)|\(TM\)|\bCPU\b|\bProcessor\b/g, "")
             .replace(/\s+/g, " ").trim()
@@ -34,7 +34,7 @@ Item {
         return s.replace(/NVIDIA |GeForce /g, "").trim()
     }
 
-    // ═══════════════ 数据模型 ═══════════════
+    // =============== Data model ===============
     readonly property var leftMetrics: {
         const out = []
         out.push({
@@ -55,7 +55,7 @@ Item {
             value: SysMonitor.memUsedGB.toFixed(1) + "/" + SysMonitor.memTotalGB.toFixed(1) + " GB",
             spec: SysMonitor.memTotalGB.toFixed(0) + " GB total"
         })
-        // 第一个 disk
+        // First disk
         if (SysMonitor.diskMounts.length > 0) {
             const d = SysMonitor.diskMounts[0]
             out.push({
@@ -102,7 +102,7 @@ Item {
                 spec: SysMonitor.swapTotalGB.toFixed(0) + " GB swap"
             })
         }
-        // 后续 disks
+        // Additional disks
         for (let i = 1; i < SysMonitor.diskMounts.length && out.length < 3; i++) {
             const d = SysMonitor.diskMounts[i]
             out.push({
@@ -116,7 +116,7 @@ Item {
         return out
     }
 
-    // ═══════════════ Loading 占位 ═══════════════
+    // =============== Loading placeholder ===============
     Column {
         anchors.centerIn: parent
         spacing: 8
@@ -239,9 +239,9 @@ Item {
         }
     }
 
-    // ═══════════════ Metric row 复用组件 ═══════════════
-    // 每行 60 高:main(36)+ gap(4) + spec(20)
-    // 内部布局(col width 390):
+    // =============== Reusable metric row ===============
+    // A 60 px row contains a 36 px main line, a 4 px gap and a 20 px detail line.
+    // Layout within the 390 px column:
     //   icon 22 / gap 6 / label 56 / gap 6 / % 44 / gap 6 / bar 168 / gap 6 / right 76
     component MetricRow: Item {
         id: row
@@ -249,7 +249,7 @@ Item {
         width: 390
         height: 60
 
-        // 主行
+        // Main line
         Item {
             x: 0
             y: 0
@@ -320,7 +320,7 @@ Item {
             }
         }
 
-        // Spec 副行
+        // Detail line
         Text {
             x: 28
             y: 40
@@ -337,8 +337,8 @@ Item {
         }
     }
 
-    // ═══════════════ Metrics 左列 (x 28, y 60) ═══════════════
-    // 每槽位 64 高(60 + 4 gap),3 行总高 184
+    // =============== Left metrics (x 28, y 60) ===============
+    // Three 60 px rows at a 64 px pitch use 184 px.
     Repeater {
         model: root.leftMetrics
         delegate: MetricRow {
@@ -351,7 +351,7 @@ Item {
         }
     }
 
-    // ═══════════════ Metrics 右列 (x 442, y 60) ═══════════════
+    // =============== Right metrics (x 442, y 60) ===============
     Repeater {
         model: root.rightMetrics
         delegate: MetricRow {
@@ -364,7 +364,7 @@ Item {
         }
     }
 
-    // ═══════════════ History 曲线复用组件 ═══════════════
+    // =============== Reusable history chart ===============
     component HistoryGraph: Item {
         id: graph
         property var values: []
@@ -373,14 +373,14 @@ Item {
         property string subtitle: ""
         property real maxVal: 1
 
-        // 卡片底
+        // Card background
         Rectangle {
             anchors.fill: parent
             radius: 12
             color: Theme.colors.surface_container
         }
 
-        // 标题
+        // Heading
         Item {
             x: 14
             y: 8
@@ -408,7 +408,7 @@ Item {
             }
         }
 
-        // 曲线 Canvas
+        // Chart canvas
         Canvas {
             id: canv
             x: 8
@@ -461,7 +461,7 @@ Item {
         }
     }
 
-    // ═══════════════ CPU graph (左下, y 260, h 100) ═══════════════
+    // =============== CPU chart (lower left, y 260, h 100) ===============
     HistoryGraph {
         x: 28
         y: 260
@@ -475,7 +475,7 @@ Item {
         maxVal: 1
     }
 
-    // ═══════════════ GPU graph (右下) ═══════════════
+    // =============== GPU chart (lower right) ===============
     HistoryGraph {
         x: 442
         y: 260
@@ -489,7 +489,7 @@ Item {
         maxVal: 1
     }
 
-    // ═══════════════ Network 段(y 376, h 120) ═══════════════
+    // =============== Network section (y 376, h 120) ===============
     Item {
         x: 28
         y: 376
@@ -516,7 +516,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
         }
 
-        // ↓ 行
+        // Download row
         Item {
             x: 0
             y: 32
@@ -591,7 +591,7 @@ Item {
             }
         }
 
-        // ↑ 行
+        // Upload row
         Item {
             x: 0
             y: 78

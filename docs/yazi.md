@@ -3,110 +3,112 @@
 ## Installation
 
 ```bash
-yay -S yazi ffmpeg 7zip jq poppler fd ripgrep fzf zoxide resvg imagemagick
+sudo pacman -S --needed yazi
+# Optional preview, search and archive tools
+sudo pacman -S --needed ffmpeg 7zip jq poppler fd ripgrep fzf zoxide resvg imagemagick
 ```
 
-| 依赖 | 用途 |
+| Dependency | Purpose |
 |---|---|
-| `ffmpeg` | 视频/音频缩略图 |
-| `7zip` | 解/压缩 7z/zip/rar |
-| `jq` | JSON 预览 |
-| `poppler` | PDF 预览 |
-| `fd` | 文件名搜索后端(`s` 键) |
-| `ripgrep` | 内容搜索后端(`S` 键) |
-| `fzf` | 模糊跳转(`Z` 键) |
-| `zoxide` | 智能跳转(`z` 键) |
-| `resvg` | SVG 预览 |
-| `imagemagick` | 其它图像格式预览 |
+| `ffmpeg` | Audio and video thumbnails |
+| `7zip` | Pack and unpack 7z, ZIP and RAR archives |
+| `jq` | JSON preview |
+| `poppler` | PDF preview |
+| `fd` | Filename search (`s`) |
+| `ripgrep` | Content search (`S`) |
+| `fzf` | Fuzzy jump (`Z`) |
+| `zoxide` | Directory jump (`z`) |
+| `resvg` | SVG preview |
+| `imagemagick` | Other image previews |
 
 ## Default File Manager
 
 ```bash
-# 系统默认文件管理器(inode/directory 走 yazi.desktop)
+# Make yazi.desktop the handler for directories.
 xdg-mime default yazi.desktop inode/directory
 ```
 
-niri `Mod+E` 键绑(`~/.dotfiles/niri/binds.kdl`):
+The niri `Mod+E` binding lives in `~/.dotfiles/niri/binds.kdl`.
 
 ```kdl
-Mod+E { spawn "kitty" "--class" "yazi" "yazi"; }
+Mod+E { spawn "wezterm" "start" "--class" "yazi" "--" "yazi"; }
 ```
 
 ## Key Bindings
 
-### 移动
+### Navigation
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `h` / `j` / `k` / `l` 或方向键 | 上一级 / 下 / 上 / 进入 |
-| `gg` / `G` | 顶部 / 底部 |
-| `Ctrl+u` / `Ctrl+d` | 上 / 下翻半页 |
-| `Ctrl+b` / `Ctrl+f` | 上 / 下翻整页 |
-| `K` / `J` | 预览面板内滚动 |
-| `Tab` | 切换 peek 大小 |
+| `h` / `j` / `k` / `l` or arrows | Parent / down / up / enter |
+| `gg` / `G` | First / last item |
+| `Ctrl+u` / `Ctrl+d` | Half a page up / down |
+| `Ctrl+b` / `Ctrl+f` | Full page up / down |
+| `K` / `J` | Scroll the preview |
+| `Tab` | Toggle peek size |
 
-### 选择
+### Selection
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `Space` | 切换当前项选中 |
-| `v` / `V` | 可视选择 / 反选可见项 |
-| `Ctrl+a` / `Ctrl+r` | 全选 / 反选所有 |
-| `Esc` | 取消选择 / 退出模式 |
+| `Space` | Toggle selection of the current item |
+| `v` / `V` | Visual selection / invert visible selection |
+| `Ctrl+a` / `Ctrl+r` | Select all / invert all |
+| `Esc` | Clear selection or leave the mode |
 
-### 文件操作
+### File Operations
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `y` / `x` / `p` | 复制 / 剪切 / 粘贴 |
-| `P` | 强制粘贴(覆盖) |
-| `d` / `D` | 移入回收站 / **永久删除** |
-| `a` | 新建(以 `/` 结尾即建目录) |
-| `r` | 重命名 |
-| `;` / `:` | 非阻塞 / 阻塞 shell |
+| `y` / `x` / `p` | Copy / cut / paste |
+| `P` | Paste and overwrite |
+| `d` / `D` | Move to trash / **delete permanently** |
+| `a` | Create an entry. A trailing `/` creates a directory. |
+| `r` | Rename |
+| `;` / `:` | Nonblocking / blocking shell |
 
-### 打开 / 跳转
+### Open and Jump
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `Enter` / `o` | 用默认程序打开 |
-| `O` | 弹"用什么打开"菜单 |
-| `z` / `Z` | zoxide / fzf 跳转 |
-| `:cd <path>` | 直接跳转 |
+| `Enter` / `o` | Open with the default application |
+| `O` | Choose an application |
+| `z` / `Z` | Jump with zoxide / fzf |
+| `:cd <path>` | Go to a path |
 
-### 搜索
+### Search
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `f` / `F` | 当前目录文件名查找 / 上一个 |
-| `s` / `S` | `fd` 文件名 / `rg` 内容全局搜索 |
-| `/` / `n` / `N` | 输入框搜索 / 下个 / 上个 |
+| `f` / `F` | Find a name in the current directory / previous match |
+| `s` / `S` | Search filenames with fd / contents with ripgrep |
+| `/` / `n` / `N` | Enter a search / next match / previous match |
 
-### 标签 / 书签
+### Tabs and Bookmarks
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `t` / `T` | 新建 / 关闭标签 |
-| `1`–`9` | 切到第 N 个 |
-| `[` / `]` | 前 / 后标签 |
-| `{` / `}` | 把当前标签往左 / 右挪 |
-| `m` / `'`+字母 | 新建 / 跳到书签 |
-| `b` / `B` | 列出 / 删除书签 |
+| `t` / `T` | Create / close a tab |
+| `1`–`9` | Select a tab by number |
+| `[` / `]` | Previous / next tab |
+| `{` / `}` | Move the current tab left / right |
+| `m` / `'` + letter | Set / jump to a bookmark |
+| `b` / `B` | List / delete bookmarks |
 
-### 排序 / 显示 / 其它
+### Sorting, Display and Other Actions
 
-| 键 | 动作 |
+| Key | Action |
 |---|---|
-| `,` | 排序菜单 |
-| `.` / `-` | 切换显隐文件 |
-| `w` | 任务管理器 |
-| `Ctrl+n` / `Ctrl+d` / `Ctrl+c` | 拖出 / 跟软链 / 复制路径 |
-| `q` / `Q` | 退出(保存 cwd / 不保存) |
-| `?` | 当前键位帮助 |
+| `,` | Sort menu |
+| `.` / `-` | Toggle hidden files |
+| `w` | Task manager |
+| `Ctrl+n` / `Ctrl+d` / `Ctrl+c` | Drag out / follow symlink / copy path |
+| `q` / `Q` | Quit and save / discard the working directory |
+| `?` | Show help for the current key bindings |
 
 ## Shell Integration
 
-退出后留在 yazi 最后所在目录,`.zshrc` 加:
+Add this function to `.zshrc` to stay in Yazi's last directory after quitting.
 
 ```zsh
 function y() {
@@ -119,13 +121,13 @@ function y() {
 }
 ```
 
-之后用 `y` 替代 `yazi` 启动。
+Launch with `y` to use the directory-changing wrapper.
 
 ## Configuration Files
 
-| 文件 | 作用 |
+| File | Purpose |
 |---|---|
-| `~/.config/yazi/yazi.toml` | 主配置 |
-| `~/.config/yazi/keymap.toml` | 键位重映射 |
-| `~/.config/yazi/theme.toml` | 配色 |
-| `~/.config/yazi/init.lua` | 启动脚本 / 插件 |
+| `~/.config/yazi/yazi.toml` | Main configuration |
+| `~/.config/yazi/keymap.toml` | Key bindings |
+| `~/.config/yazi/theme.toml` | Colors |
+| `~/.config/yazi/init.lua` | Startup script and plugins |

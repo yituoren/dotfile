@@ -1,17 +1,17 @@
 pragma ComponentBehavior: Bound
 
-// WorkspaceIndicator —— 跟 Niri.workspaces 实时联动
+// Keep the workspace indicator in sync with Niri.workspaces.
 //
-// 视觉规则:
-//   - Active + 有窗口:长药丸,内部 N 个类别图标(Material Symbols Rounded);
-//                     当前 focus 的窗口图标背后浮一个高亮"舱位",随 focus 切换滑动
-//   - Active + 空:32×24 长药丸,空内容
-//   - Inactive(无论是否有窗口):12×12 正圆点
+// Workspace states:
+//   - Active with windows: a wide pill with one Material Symbols Rounded category icon per window.
+//                     A sliding highlight marks the focused window.
+//   - Active and empty: a 32 by 24 px pill.
+//   - Inactive: a 12 px dot, regardless of window count.
 //
-// 动画:
-//   - 工作区切换:pill 宽 / 高 / 颜色都有 Behavior;iconRow 整体 opacity 渐隐渐显
-//   - 窗口切换(同 ws):高亮舱位 x 走 Emphasized easing,左右滑过去
-//   - 高亮在 ws 切换时:opacity 渐淡,然后到新 ws 的对应位置渐显
+// Transitions:
+//   - Workspace changes animate pill size and color and fade the icon row.
+//   - Focus changes within a workspace slide the highlight with emphasized easing.
+//   - Across workspaces, fade the highlight out and back in at its new position.
 
 import QtQuick
 import qs.services
@@ -21,7 +21,7 @@ Row {
     spacing: 10
     readonly property int slotHeight: 24
 
-    // 图标尺寸 + 排版常量(高亮舱位计算要用)
+    // Icon dimensions and spacing also determine the highlight position.
     readonly property int iconSize: 18
     readonly property int iconSpacing: 6
     readonly property int iconStride: iconSize + iconSpacing  // 24
@@ -65,7 +65,9 @@ Row {
             required property var modelData
 
             readonly property bool isActive: slot.modelData.id === Niri.activeWorkspaceId
-            readonly property var windowsInWs: Niri.windows.filter(w => w.workspace_id === slot.modelData.id)
+            readonly property var windowsInWs: Niri.windows
+                .filter(w => w.workspace_id === slot.modelData.id)
+                .sort((a, b) => Niri.compareWindowPosition(a, b))
             readonly property bool hasWindows: slot.windowsInWs.length > 0
             readonly property int focusedIdx:
                 slot.windowsInWs.findIndex(w => w.id === Niri.focusedWindowId)
@@ -76,7 +78,7 @@ Row {
             Rectangle {
                 id: pillBg
                 anchors.centerIn: parent
-                clip: true  // 收缩时图标不外露
+                clip: true  // Clip icons while the workspace pill shrinks.
 
                 width: {
                     if (!slot.isActive) return 12
@@ -102,10 +104,10 @@ Row {
                     ColorAnimation { duration: 340 }
                 }
 
-                // ---- 焦点窗口高亮舱位(在 iconRow 之前声明,保证 z 序在下方) ----
-                // 形状跟 workspace pill 一致:fully rounded(radius = height/2)。
-                // 颜色反转:chip 用 on_primary(pill 的对比色)做底,焦点 icon 改用 primary
-                // 做色 —— 视觉上是"陷进药丸里的反相小药丸",对比强烈。
+                // ---- Focus highlight (declared before iconRow to draw underneath it) ----
+                // Match the workspace pill with a radius of half the height.
+                // Use on_primary behind the focused icon and primary for the glyph
+                // to reverse the colors inside the workspace pill.
                 Rectangle {
                     id: focusHighlight
                     width: 26
@@ -115,7 +117,7 @@ Row {
                     opacity: (slot.isActive && slot.focusedIdx >= 0) ? 1 : 0
                     visible: opacity > 0
 
-                    // 居中到 focus 图标:chip 比 icon 宽 8px,所以左移 (26 - iconSize)/2 = 4
+                    // Center the wider chip on the icon with an offset of (26 - iconSize) / 2 = 4 px.
                     x: iconRow.x + slot.focusedIdx * root.iconStride - (width - root.iconSize) / 2
                     y: (pillBg.height - height) / 2
 
@@ -156,7 +158,7 @@ Row {
                             text: root.categoryIcon(iconText.modelData.app_id ?? "")
                             font.family: "Material Symbols Rounded"
                             font.pixelSize: root.iconSize
-                            // 反转:焦点窗口取 primary(同 pill 底色)→ 看起来像被 chip 抠了个洞
+                            // The focused glyph uses the pill background color inside the inverted chip.
                             color: iconText.isFocused ? Theme.colors.primary : Theme.colors.on_primary
 
                             Behavior on color {

@@ -1,0 +1,103 @@
+/* Scoped to chatgpt.com by the embedded view. Use the same roles as the bar. */
+:root, html.light, html.dark, body, [data-theme="light"], [data-theme="dark"] {
+    --mine-page: {{colors.surface.default.hex}};
+    --mine-sidebar: {{colors.surface_container_low.default.hex}};
+    --mine-panel: {{colors.surface_container.default.hex}};
+    --mine-raised: {{colors.surface_container_high.default.hex}};
+    --mine-ink: {{colors.on_surface.default.hex}};
+    --mine-muted: {{colors.on_surface_variant.default.hex}};
+    --mine-line: {{colors.outline_variant.default.hex}};
+    --mine-accent: {{colors.primary.default.hex}};
+    --mine-on-accent: {{colors.on_primary.default.hex}};
+    --mine-bubble: {{colors.primary_container.default.hex}};
+    --mine-on-bubble: {{colors.on_primary_container.default.hex}};
+
+    --color-surface: var(--mine-page) !important;
+    --color-surface-secondary: var(--mine-sidebar) !important;
+    --color-surface-tertiary: var(--mine-raised) !important;
+    --color-surface-elevated: var(--mine-panel) !important;
+    --color-surface-elevated-secondary: var(--mine-raised) !important;
+    --color-text: var(--mine-ink) !important;
+    --color-text-secondary: var(--mine-muted) !important;
+    --color-text-tertiary: var(--mine-muted) !important;
+    --color-border: var(--mine-line) !important;
+    --color-text-user-message: var(--mine-on-bubble) !important;
+    --color-background-user-message: var(--mine-bubble) !important;
+    --color-background-composer-surface: var(--mine-panel) !important;
+    --color-background-composer-primary: var(--mine-accent) !important;
+    --color-text-composer-primary: var(--mine-on-accent) !important;
+    --bg-primary: var(--mine-page) !important;
+    --bg-secondary: var(--mine-panel) !important;
+    --bg-tertiary: var(--mine-raised) !important;
+    --bg-elevated-primary: var(--mine-panel) !important;
+    --bg-elevated-secondary: var(--mine-raised) !important;
+    --main-surface-primary: var(--mine-page) !important;
+    --main-surface-secondary: var(--mine-panel) !important;
+    --main-surface-tertiary: var(--mine-raised) !important;
+    --sidebar-surface-primary: var(--mine-sidebar) !important;
+    --sidebar-surface-secondary: var(--mine-raised) !important;
+    --text-primary: var(--mine-ink) !important;
+    --text-secondary: var(--mine-muted) !important;
+    --text-tertiary: var(--mine-muted) !important;
+    --icon-primary: var(--mine-ink) !important;
+    --icon-secondary: var(--mine-muted) !important;
+    --border-light: var(--mine-line) !important;
+    --border-default: var(--mine-line) !important;
+    --message-surface: var(--mine-bubble) !important;
+    --font-sans: "Maple Mono NF CN", sans-serif;
+    --font-mono: "Maple Mono NF CN", monospace;
+    accent-color: var(--mine-accent);
+}
+
+/* Paint only the corners of the web viewport against the black ChatMenu frame.
+   The site's body can move horizontally independently of that viewport. */
+html::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    pointer-events: none;
+    border-radius: 14px;
+    box-shadow: 0 0 0 14px #000;
+}
+html, body, main, #page-header {
+    background-color: var(--mine-page) !important;
+    color: var(--mine-ink) !important;
+}
+
+body, textarea, [contenteditable="true"] { font-family: var(--font-sans); }
+pre, code, kbd { font-family: var(--font-mono); }
+.markdown p { line-height: 1.65; }
+.markdown a { color: var(--mine-accent) !important; }
+
+/* The mobile layout paints fade layers over the header, composer and sidebar.
+   Keep their masks and give them the color of the surface underneath. */
+#web-mobile-root [data-testid="ds-document-layout"],
+#web-mobile-root [data-slot="header"] > span[aria-hidden="true"],
+#web-mobile-root [data-ds-composer] > span[aria-hidden="true"] {
+    background-color: var(--mine-page) !important;
+}
+#stage-slideover-sidebar, #stage-sidebar-tiny-bar,
+#ds-sidebar,
+#ds-sidebar [data-slot="sidebar-header"] > span[aria-hidden="true"],
+#ds-sidebar [data-slot="sidebar-actions"] > span[aria-hidden="true"],
+#ds-sidebar [data-slot="sidebar-actions"] section {
+    background-color: var(--mine-sidebar) !important;
+}
+.user-message-bubble-color, [data-user-message-bubble] {
+    background-color: var(--mine-bubble) !important;
+    color: var(--mine-on-bubble) !important;
+}
+form [data-composer-surface], [data-type="unified-composer"] {
+    background-color: var(--mine-panel) !important;
+    color: var(--mine-ink) !important;
+}
+#prompt-textarea { color: var(--mine-ink) !important; }
+#composer-submit-button:enabled {
+    background-color: var(--mine-accent) !important;
+    color: var(--mine-on-accent) !important;
+}
+::selection {
+    background-color: var(--mine-bubble);
+    color: var(--mine-on-bubble);
+}

@@ -1,11 +1,11 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-// Niri.qml —— niri 兼容层(替代 ii 的 HyprlandData.qml)
+// niri adapter replacing ii's HyprlandData.qml
 //
-// 长连接 `niri msg --json event-stream`,把事件解码成响应式属性。
-// 初版只接最小核心:工作区列表、窗口列表、焦点窗口、活动工作区。
-// 不认识的事件全部 console.log,方便观察 niri 实际吐什么。
+// Decode the persistent niri msg --json event-stream into observable properties.
+// Track workspaces, windows, the focused window and the active workspace.
+// Log unfamiliar events for inspection.
 
 import QtQuick
 import Quickshell
@@ -14,16 +14,16 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    // ------- 响应式状态 -------
+    // ---- Observable state ----
     property var workspaces: []          // [{id, idx, name, output, is_active, is_focused, is_urgent, active_window_id}, ...]
     property var windows: []             // [{id, title, app_id, pid, workspace_id, is_focused, ...}, ...]
     property int focusedWindowId: -1
     property int activeWorkspaceId: -1
     property bool overviewOpen: false
     property bool configOk: true
-    property bool ready: false           // 第一次 WorkspacesChanged 后置 true
+    property bool ready: false           // Set after the first WorkspacesChanged snapshot.
 
-    // ------- 长连接 niri 事件流 -------
+    // ---- Persistent niri event stream ----
     Process {
         id: stream
         running: true
@@ -32,11 +32,11 @@ Singleton {
             splitMarker: "\n"
             onRead: line => root.handleLine(line)
         }
-        // niri 退出会让 Process 结束;niri 重启后这里没有自动重连逻辑,
-        // 通常 niri 不会中途挂,先不做重试,等真出问题再补 onExited 重启
+        // The process ends when niri exits and does not automatically reconnect.
+        // An onExited retry could be added if compositor restarts need to be handled.
     }
 
-    // ------- 解析 -------
+    // ---- Event decoding ----
     function handleLine(line: string): void {
         if (!line || line.length === 0) return
         let event
@@ -50,7 +50,7 @@ Singleton {
         const data = event[type]
 
         switch (type) {
-            // ===== 快照(连接时一次性发) =====
+            // ==== Initial snapshots ====
             case "WorkspacesChanged":
                 root.workspaces = data.workspaces
                 const focusedWs = data.workspaces.find(w => w.is_focused)
@@ -64,13 +64,13 @@ Singleton {
                 root.focusedWindowId = focusedWin ? focusedWin.id : -1
                 break
 
-            // ===== 增量 =====
+            // ==== Incremental events ====
             case "WorkspaceActivated":
-                // 切到某个工作区;data: {id, focused}
-                // focused=true 表示用户主动聚焦(对应 activeWorkspaceId),
-                // focused=false 表示该 output 上的 active workspace 变了但用户没聚焦它
+                // Workspace activation payload: {id, focused}
+                // When focused is true, the user switched focus and activeWorkspaceId changes.
+                // Otherwise only the active workspace on that output changed.
                 if (data.focused) root.activeWorkspaceId = data.id
-                // 同步 workspaces 数组里的 is_active / is_focused
+                // Update is_active and is_focused in the workspace array.
                 const target = root.workspaces.find(w => w.id === data.id)
                 if (target) {
                     root.workspaces = root.workspaces.map(w => {
@@ -93,7 +93,7 @@ Singleton {
                 break
 
             case "WindowOpenedOrChanged":
-                // 单窗口的新增或属性变化(标题/floating 等)
+                // A window opened or changed properties such as its title or floating state.
                 const w = data.window
                 const idx = root.windows.findIndex(x => x.id === w.id)
                 const next = root.windows.slice()
@@ -102,6 +102,13 @@ Singleton {
                 root.windows = next
                 if (w.is_focused) root.focusedWindowId = w.id
                 break
+
+            case "WindowLayoutsChanged": {
+                const layouts = new Map(data.changes)
+                root.windows = root.windows.map(win => layouts.has(win.id)
+                    ? Object.assign({}, win, { layout: layouts.get(win.id) }) : win)
+                break
+            }
 
             case "WindowClosed":
                 root.windows = root.windows.filter(w => w.id !== data.id)
@@ -117,15 +124,14 @@ Singleton {
                 root.configOk = !data.failed
                 break
 
-            // 暂不处理但要观察的:
+            // Events reserved for future handling:
             case "WorkspaceActiveWindowChanged":
             case "WorkspaceUrgencyChanged":
             case "WindowUrgencyChanged":
-            case "WindowLayoutsChanged":
             case "KeyboardLayoutsChanged":
             case "CastsChanged":
-            case "WindowFocusTimestampChanged":  // 每次聚焦都触发,niri 内部用;Bar/Overview 都不关心
-                // 静默,以后补
+            case "WindowFocusTimestampChanged":  // Sent on each focus change. The bar and overview do not use this timestamp.
+                // Ignore for now.
                 break
 
             default:
@@ -133,12 +139,28 @@ Singleton {
         }
     }
 
-    // ------- dispatch(发出 niri action) -------
+    function compareWindowPosition(a, b): real {
+        const tileA = a.layout?.pos_in_scrolling_layout
+        const tileB = b.layout?.pos_in_scrolling_layout
+        if (tileA && tileB)
+            return tileA[0] - tileB[0] || tileA[1] - tileB[1] || a.id - b.id
+        if (tileA || tileB) return tileA ? -1 : 1
+
+        // Floating windows have no column. Order them after the tiled group.
+        const posA = a.layout?.tile_pos_in_workspace_view
+        const posB = b.layout?.tile_pos_in_workspace_view
+        if (posA && posB)
+            return posA[0] - posB[0] || posA[1] - posB[1] || a.id - b.id
+        if (posA || posB) return posA ? -1 : 1
+        return a.id - b.id
+    }
+
+    // ---- Dispatch niri actions ----
     //
-    // niri 的 `action focus-workspace` 只认 idx / name,不认我们这边事件流给的 id。
-    // 所以传 ws.id 进来后,在本地 workspaces 里查 idx 再调命令。
-    // 单显示器场景下 idx 唯一;多显示器场景下 niri 会在当前 output 找,
-    // 暂时不实现"跨 output 切到指定 id"的复杂情况。
+    // The focus-workspace action accepts an index or name. The event stream supplies an ID.
+    // Resolve that ID against the local workspace list before dispatching.
+    // Indices are unique on a single output. With multiple outputs, niri searches the current one.
+    // Cross-output selection by ID is currently unsupported.
     function focusWorkspace(id: int): void {
         const ws = root.workspaces.find(w => w.id === id)
         if (!ws) {
@@ -151,10 +173,10 @@ Singleton {
 
     Process {
         id: dispatcher
-        // command 在 focusWorkspace 等里赋值,running=true 触发一次
+        // Actions such as focusWorkspace set the command and set running to true once.
     }
 
-    // ------- 调试用:打印当前状态摘要(qs ipc call niri dump) -------
+    // ---- Log a state summary with qs ipc call niri dump ----
     IpcHandler {
         target: "niri"
         function dump(): void {

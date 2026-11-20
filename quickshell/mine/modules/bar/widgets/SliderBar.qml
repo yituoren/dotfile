@@ -1,9 +1,9 @@
 pragma ComponentBehavior: Bound
 
-// SliderBar —— 通用进度/数值条
-// 鼠标 hover 时尾端的 thumb 弹出,可以按住拖动实时改值;松开/移开 → thumb 缩回去
+// Reusable progress and value slider.
+// Show the thumb on hover. Drag to update the value, then retract the thumb on release or exit.
 //
-// 用法:
+// Example:
 //   SliderBar {
 //       value: SystemStatus.volume
 //       onMoved: (v) => SystemStatus.setVolume(v)
@@ -15,15 +15,15 @@ import qs.services
 Item {
     id: root
 
-    // 公共 API
+    // Public API
     property real value: 0                  // 0.0 - 1.0
-    property real wheelStep: 0.05           // 滚轮步进
-    property real minValue: 0               // 不能拖到 0 以下;某些场景(如屏幕亮度)可以设 0.05 避免黑屏
-    signal moved(real newValue)             // 用户改值时触发(parent 实际去写后端)
+    property real wheelStep: 0.05           // Mouse wheel increment
+    property real minValue: 0               // Lower bound. A minimum of 0.05 can prevent a brightness slider from blanking the screen.
+    signal moved(real newValue)             // Emitted on user input. The parent writes the value to the backend.
 
     readonly property bool active: hover.containsMouse || hover.pressed
 
-    implicitHeight: 24                      // 整体的鼠标触摸高度(track 之外有一圈 hover 区域)
+    implicitHeight: 24                      // Include a hover target above and below the visible track.
 
     Rectangle {
         id: track
@@ -36,7 +36,7 @@ Item {
         radius: 4
         color: Theme.colors.surface_container_high
 
-        // 填充部分
+        // Filled track
         Rectangle {
             width: parent.width * Math.max(0, Math.min(1, root.value))
             height: parent.height
@@ -45,7 +45,7 @@ Item {
         }
     }
 
-    // Thumb —— hover/press 时弹出,松开消失。白色 knob 跟 IosSwitch 一致
+    // The white thumb matches IosSwitch. Show it on hover or press.
     Rectangle {
         id: thumb
         readonly property real targetX: parent.width * Math.max(0, Math.min(1, root.value)) - width / 2

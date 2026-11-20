@@ -1,18 +1,18 @@
--- 引入 wezterm 模块
+-- Import the WezTerm module.
 local wezterm = require 'wezterm'
--- 创建配置对象 (新版 WezTerm 推荐写法)
+-- Create a configuration builder for recent WezTerm versions.
 local config = wezterm.config_builder()
 
 config.automatically_reload_config = true
 config.enable_wayland = true
 
 -- =========================================================
--- 🎨 颜值与外观 (Appearance)
+-- Appearance
 -- =========================================================
 
--- 1. 配色方案
--- 直接读 matugen 的 colors.json,跟壁纸联动。读不到再退回到 Tokyo Night。
--- 这样无论 wezterm 是从 shell 起还是被 fuzzel/.desktop 直接拉起来,色板都一致。
+-- 1. Color scheme
+-- Read matugen colors.json to follow the wallpaper. Fall back to Tokyo Night if unavailable.
+-- Use the same palette when launched from a shell, fuzzel or a desktop entry.
 local matugen_colors_path = os.getenv('HOME') .. '/.local/state/quickshell/user/generated/colors.json'
 
 local function load_matugen_colors(path)
@@ -21,7 +21,7 @@ local function load_matugen_colors(path)
     local content = f:read('*a'); f:close()
     local ok, parsed = pcall(wezterm.json_parse, content)
     if not ok or not parsed then return nil end
-    -- 映射跟 ~/.dotfiles/scripts/setwall.sh / .zshrc 里那套保持一致
+    -- Keep the mapping in sync with ~/.dotfiles/scripts/setwall.sh and .zshrc.
     return {
         background = parsed.background,
         foreground = parsed.on_background,
@@ -60,62 +60,62 @@ else
     config.color_scheme = 'Tokyo Night (Gogh)'
 end
 
--- 让 wezterm 监听 colors.json 变化,setwall 换壁纸后自动重载
+-- Watch colors.json and reload after setwall changes the wallpaper.
 wezterm.add_to_config_reload_watch_list(matugen_colors_path)
 
--- 2. 字体设置
--- 必须先安装 Nerd Fonts (sudo pacman -S ttf-jetbrains-mono-nerd)
+-- 2. Fonts
+-- Install a Nerd Font first (for example, sudo pacman -S ttf-jetbrains-mono-nerd).
 config.font = wezterm.font('Maple Mono NF CN', { weight = 'Bold' })
 config.font_size = 12.5
 config.cell_width = 1.1
 
--- 3. 窗口背景透明
-config.window_background_opacity = 0.85 -- 0.0 到 1.0,越小越透
+-- 3. Window opacity
+config.window_background_opacity = 0.85 -- Range 0.0 to 1.0. Lower values are more transparent.
 
--- 4. 去掉丑陋的顶部标题栏
--- "RESIZE" 允许你拖动边缘调整大小，但没有标题栏
+-- 4. Window decorations
+-- RESIZE allows resizing from the edges without a title bar.
 -- config.window_decorations = "RESIZE"
 
--- 5. 标签栏样式
--- config.use_fancy_tab_bar = false -- 设为 false 使用更紧凑的传统样式
--- config.hide_tab_bar_if_only_one_tab = true -- 只有一个标签时隐藏标签栏，极致极简
+-- 5. Tab bar
+-- config.use_fancy_tab_bar = false -- Disable the fancy tab bar for the compact classic layout.
+-- config.hide_tab_bar_if_only_one_tab = true -- Hide the tab bar when only one tab is open.
 config.enable_tab_bar = false
 
 config.default_cursor_style = 'SteadyBar'
 
 -- =========================================================
--- 🚀 性能与硬件 (Performance)
+-- Performance and graphics
 -- =========================================================
--- 显卡加速前端，通常选 WebGpu 或 OpenGL
--- WebGpu 在 niri/wlroots 系合成器上有黑屏+无输入问题,固定用 OpenGL
+-- Use a GPU-accelerated frontend such as WebGpu or OpenGL.
+-- Use OpenGL to avoid black screens and lost input with WebGpu under niri/wlroots.
 config.front_end = "OpenGL"
 
 -- =========================================================
--- ⌨️ 键位映射 (Keybindings) - 像 Tmux 一样使用
+-- Tmux-style key bindings
 -- =========================================================
--- 定义 Leader Key (类似 Tmux 的前缀键)，这里设为 Ctrl+a
+-- Use Ctrl+a as the leader, like a tmux prefix.
 -- config.leader = { key = 'd', mods = 'ALT', timeout_milliseconds = 2000}
 
 config.keys = {
-    -- 1. 垂直分屏
+    -- 1. Split vertically.
     {
         key = ',',
         mods = 'ALT',
         action = wezterm.action.SplitVertical { domain = 'CurrentPaneDomain' },
     },
-    -- 2. 水平分屏
+    -- 2. Split horizontally.
     {
         key = '.',
         mods = 'ALT',
         action = wezterm.action.SplitHorizontal { domain = 'CurrentPaneDomain' },
     },
-    -- 3. 关闭当前分屏
+    -- 3. Close the current pane.
     {
         key = 'd',
         mods = 'ALT',
         action = wezterm.action.CloseCurrentPane { confirm = true },
     },
-    -- 4. 在分屏之间跳转
+    -- 4. Move between panes.
     { key = 'LeftArrow',  mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Left' },
     { key = 'RightArrow', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Right' },
     { key = 'UpArrow',    mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Up' },
@@ -126,11 +126,11 @@ config.keys = {
 }
 
 -- =========================================================
--- 🔧 其他实用设置
+-- Other settings
 -- =========================================================
--- 启动时不检查更新 (Arch 包管理器会管)
+-- Let the Arch package manager handle updates.
 config.check_for_updates = false
--- 禁用烦人的响铃声
+-- Disable the audible bell.
 config.audible_bell = "Disabled"
 
 return config

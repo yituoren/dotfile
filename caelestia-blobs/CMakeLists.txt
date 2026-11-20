@@ -9,7 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Qt6 REQUIRED COMPONENTS Quick ShaderTools)
 qt_standard_project_setup(REQUIRES 6.5)
 
-# 安装到用户级 QML import dir,Quickshell / Qt 自动从这里找 Caelestia.Blobs 模块
+# Install Caelestia.Blobs in the user QML import directory used by Qt and Quickshell.
 set(INSTALL_QMLDIR "$ENV{HOME}/.local/share/qt6/qml" CACHE STRING "QML install dir")
 
 qt_add_qml_module(caelestia-blobs
@@ -27,7 +27,7 @@ qt_add_shaders(caelestia-blobs "blob_shaders"
     BATCHABLE OPTIMIZED NOHLSL NOMSL
     GLSL "300es,330"
     PREFIX "/"
-    BASE src  # 让 resource 路径去掉 src/ 前缀,变成 :/shaders/blob.frag.qsb(plugin C++ 代码里用的就是这个)
+    BASE src  # Strip src/ from the resource path so the C++ plugin can load :/shaders/blob.frag.qsb.
     FILES
         src/shaders/blob.frag
         src/shaders/blob.vert
@@ -36,7 +36,7 @@ qt_add_shaders(caelestia-blobs "blob_shaders"
 target_include_directories(caelestia-blobs PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(caelestia-blobs PRIVATE Qt::Core Qt::Qml Qt::Quick)
 
-# 安装到 ~/.local/share/qt6/qml/Caelestia/Blobs/
+# Install in ~/.local/share/qt6/qml/Caelestia/Blobs/.
 qt_query_qml_module(caelestia-blobs
     URI module_uri
     VERSION module_version

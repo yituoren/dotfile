@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# setwall —— 切换壁纸 + 重跑 matugen 染色,niri 上的 swww/awww 通用
-# 用法:
-#   setwall <image-path>          切到指定图,fade 过渡
-#   setwall <image-path> wipe     指定过渡类型(fade/wipe/grow/center/wave/...)
-#   setwall random                从 ~/Pictures/Wallpaper 随机抽一张
+# Set the wallpaper and regenerate matugen colors under niri with awww.
+# Usage:
+#   setwall <image-path>          Set an image with the fade transition.
+#   setwall <image-path> wipe     Choose a transition (fade, wipe, grow, center, wave, etc.).
+#   setwall random                Pick a random image from ~/Pictures/Wallpaper.
 
 set -euo pipefail
 
@@ -19,19 +19,41 @@ else
     exit 2
 fi
 
-# 1. 切壁纸
+# Serialize wallpaper changes so the greeter receives the palette for the displayed image.
+exec 8<"${BASH_SOURCE[0]}"
+flock -x 8
+
+# 1. Change the wallpaper.
 awww img "$img" \
     --transition-type "$TRANSITION" \
     --transition-duration 0.8 \
     --transition-fps 60
 
-# 2. 重跑 matugen,所有模板自动重新生成(GTK / fuzzel / qs colors.json / ...)
-# --source-color-index 0:选最显著色,跳过 matugen 4.x 的交互菜单
+# 2. Regenerate all matugen templates, including GTK, fuzzel and Quickshell colors.json.
+# --source-color-index 0 selects the dominant color and skips the matugen 4.x picker.
 matugen image "$img" --source-color-index 0
 
-# 3. 由 matugen 的 colors.json 派生终端 OSC 颜色序列,直接广播到所有活终端
-#    新开 zsh 由 .zshrc 自己读 colors.json,这里只管活终端的实时刷新
-#    Material You → ANSI 16 的映射跟 .zshrc 里那段保持一致
+# The greeter reads a pre-blurred copy at boot, before the desktop session starts.
+if [[ -w /var/lib/mine-greeter ]]; then
+    repo=$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")
+    "$repo/sddm/update-background" "$img" || echo "Could not update the login wallpaper" >&2
+fi
+
+flock -u 8
+exec 8<&-
+
+# KDE caches the active scheme in kdeglobals. Reapply it after matugen renders it.
+if command -v plasma-apply-colorscheme >/dev/null; then
+    if [[ $(kreadconfig6 --group General --key ColorScheme) == MineDesktop ]]; then
+        plasma-apply-colorscheme --accent-color "$(jq -r '.primary' "$HOME/.local/state/quickshell/user/generated/colors.json")"
+    else
+        plasma-apply-colorscheme MineDesktop
+    fi
+fi
+
+# 3. Derive terminal palette OSC sequences from colors.json and broadcast them to live terminals.
+#    New zsh sessions read colors.json in .zshrc. This broadcast updates existing sessions.
+#    Keep the Material You to ANSI 16 mapping in sync with .zshrc.
 COLORS_JSON="$HOME/.local/state/quickshell/user/generated/colors.json"
 if [[ -f "$COLORS_JSON" ]] && command -v jq >/dev/null; then
     mapfile -t C < <(jq -r '
@@ -59,8 +81,8 @@ if [[ -f "$COLORS_JSON" ]] && command -v jq >/dev/null; then
     done
 fi
 
-# 4. 戳一下自建 qs shell 的 Theme 服务,让它重读 colors.json
-#    qs 没在跑就 silently 跳过
+# 4. Tell the custom shell's Theme service to reread colors.json.
+#    Skip silently when Quickshell is not running.
 qs -c mine ipc call theme reload 2>/dev/null || true
 
 echo "wallpaper set: $img"

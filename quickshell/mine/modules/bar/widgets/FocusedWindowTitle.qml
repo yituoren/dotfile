@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 
-// FocusedWindowTitle —— 当前焦点窗口的 title,超长省略
+// Elide the focused window title when it exceeds the available width.
 
 import QtQuick
 import qs.services
@@ -11,7 +11,7 @@ Text {
     readonly property var focusedWindow: Niri.windows.find(w => w.id === Niri.focusedWindowId)
     readonly property string overviewTag: Niri.overviewOpen ? "[overview]  " : ""
     readonly property string focusedTitle: {
-        if (!focusedWindow) return "(no focus)"
+        if (!focusedWindow) return ""
         return focusedWindow.title ?? "(untitled)"
     }
 

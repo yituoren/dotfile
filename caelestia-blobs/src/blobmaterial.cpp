@@ -31,7 +31,7 @@ bool BlobMaterialShader::updateUniformData(RenderState& state, QSGMaterial* newM
     Q_UNUSED(oldMaterial);
     auto* mat = static_cast<BlobMaterial*>(newMaterial);
     QByteArray* buf = state.uniformData();
-    // 1440 = 160 + 16*80 (rectData[80] 结束) ;再加渐变 colorBottom(16) + gradTop(4) + gradBottom(4) + 8 padding = 1472
+    // rectData ends at 160 + 16*80 = 1440 bytes. colorBottom, gradTop, gradBottom and padding add 16+4+4+8 = 32 bytes.
     Q_ASSERT(buf->size() >= 1472);
 
     if (state.isMatrixDirty()) {
@@ -99,7 +99,7 @@ bool BlobMaterialShader::updateUniformData(RenderState& state, QSGMaterial* newM
         memcpy(buf->data() + base + 64, r.radius, 16);
     }
 
-    // 渐变 uniforms,接在 rectData 后面(offset 1440 起)
+    // Gradient uniforms follow rectData at offset 1440.
     const float colorBottom[4] = {
         static_cast<float>(mat->m_colorBottom.redF()),
         static_cast<float>(mat->m_colorBottom.greenF()),

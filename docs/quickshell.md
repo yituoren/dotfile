@@ -1,32 +1,51 @@
 # Quickshell
 
-`quickshell/mine/` 是自建 shell;`quickshell/ii/` 是 illogical-impulse 的实现,留作参考不启动。
+The desktop runs the custom shell in `quickshell/mine/`. The idle monitors and session lock run independently of the bar.
 
 ## Architecture
 
-仿 [caelestia-dots/shell](https://github.com/caelestia-dots/shell) 的 ContentWindow 模式:每屏一个全屏 layer-shell `PanelWindow`(`modules/drawers/ContentWindow.qml`)装下 bar + popup + 全屏 scrim。bar 跟 popup 在同一 scene graph,自编 `Caelestia.Blobs` C++ plugin 用 SDF cubic smin 做 metaball 融合 —— 它俩靠近时平滑合并成一坨"挖凹槽"视觉。
+Each output has a fullscreen layer-shell `PanelWindow` in `modules/drawers/ContentWindow.qml`. It contains the bar, popups and outside-click scrim. A shared scene graph lets the `Caelestia.Blobs` C++ plugin blend the bar and popup with a cubic smooth minimum to produce the curved join. [Caelestia shell](https://github.com/caelestia-dots/shell)
 
-`PopupManager`(Singleton)是 popup 状态唯一来源:`currentPopup` / `anchorX` / `openAmount` / `triggerRelativeX` / `animatedAnchorX` / `displayWidth` 等都在它身上,bar 跟 popup 都派生几何。
+The `PopupManager` singleton owns popup state. Bar and popup geometry derive from `currentPopup`, `anchorX`, `openAmount`, `triggerRelativeX`, `animatedAnchorX` and `displayWidth`.
 
-更深的细节见 `CLAUDE.md` 里的 "shell 架构" 那节。
+The popup shape provides the blur region for this same surface on each animation frame. Closing the dashboard clears the region. The Arch chat panel has its own state and WebEngine surface. [Media controls, spectrum and lyrics](media.md)
+
+## Session Lock
+
+`Mod+Ctrl+L` and the power menu start `mine-lock.service`. The independent shell in `quickshell/mine-lock/` takes a Wayland session lock on every output and authenticates through the system PAM `login` profile. Press a key or click to reveal the empty password field. Type the password and press Enter to submit. Escape clears the field and returns to the clock.
+
+On a fresh checkout, link the configurations and user units.
+
+```bash
+mkdir -p ~/.config/quickshell ~/.config/systemd/user
+ln -s ~/.dotfiles/quickshell/mine ~/.config/quickshell/mine
+ln -s ~/.dotfiles/quickshell/mine-lock ~/.config/quickshell/mine-lock
+ln -s ~/.dotfiles/quickshell/mine-idle ~/.config/quickshell/mine-idle
+ln -s ~/.dotfiles/quickshell/mine-idle/mine-idle.service ~/.config/systemd/user/
+ln -s ~/.dotfiles/quickshell/mine-lock/systemd/*.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user start mine-sleep-lock.service
+```
+
+Quickshell IdleMonitor requests lock at five minutes, monitor power-off at ten, and suspend at fifteen. The session guard forwards logind lock requests and pauses the timers for logind idle inhibitors. The compositor handles Wayland inhibitors. The sleep guard uses system Python with PyGObject to hold a logind delay inhibitor. It releases the inhibitor when the compositor confirms the lock. The next lock loads the current wallpaper, matugen colors and QML.
 
 ## Caelestia.Blobs Plugin
 
-源码在 `~/.dotfiles/caelestia-blobs/`,从 caelestia-dots/shell 的 Blobs 子模块原样移植(5 个 .cpp + 5 个 .hpp + 2 个 GLSL shader,只依赖 Qt6/Quick,不拖 Caelestia 别的 config)。
+`~/.dotfiles/caelestia-blobs/` contains the port of Caelestia's Blobs submodule, with five C++ sources, five headers and two GLSL shaders. It depends on Qt 6 Quick and builds independently of the rest of Caelestia.
 
 ### Build & Install
 
 ```bash
-yay -S cmake qt6-base qt6-shadertools qt6-declarative
+sudo pacman -S --needed quickshell cmake gcc make qt6-base qt6-shadertools qt6-declarative
 
 cd ~/.dotfiles/caelestia-blobs
 mkdir -p build && cd build
 cmake ..
 make -j
-make install   # → ~/.local/share/qt6/qml/Caelestia/Blobs/(用户级,不需要 sudo)
+make install   # User installation in ~/.local/share/qt6/qml/Caelestia/Blobs/
 ```
 
-验证:
+Verify the installed files:
 
 ```bash
 ls ~/.local/share/qt6/qml/Caelestia/Blobs/
@@ -35,66 +54,97 @@ ls ~/.local/share/qt6/qml/Caelestia/Blobs/
 
 ### Iterating
 
-改 C++ 或 GLSL 后必须重 build + install + 重启 qs(plugin .so 是启动时一次性加载,QML 热重载不会重载 native code):
+Rebuild, reinstall and restart qs after changing C++ or GLSL. Quickshell loads the native library at process startup.
 
 ```bash
 cd ~/.dotfiles/caelestia-blobs/build && make && make install
-pkill -f "qs.*mine"
+qs -c mine kill
 QML_IMPORT_PATH="$HOME/.local/share/qt6/qml" qs -p ~/.config/quickshell/mine -d
 ```
 
-(从 niri 自动起的 qs 会从 niri 进程继承 `QML_IMPORT_PATH`,手动起的要自己带上)
+When launched by niri, qs inherits `QML_IMPORT_PATH`. Set it explicitly for a manual launch.
 
 ## QML Module Path
 
-Qt 默认只搜 `/usr/lib/qt6/qml`。装到用户级 `~/.local/share/qt6/qml/` 必须靠环境变量让 Qt / Quickshell 看到。`niri/environment.kdl` 里写死了:
+Qt searches `/usr/lib/qt6/qml` by default. Expose the user installation under `~/.local/share/qt6/qml/` in `niri/environment.kdl`.
 
 ```kdl
 QML_IMPORT_PATH "/home/yituoren/.local/share/qt6/qml"
 QML2_IMPORT_PATH "/home/yituoren/.local/share/qt6/qml"
 ```
 
-值是字面字符串,**换机器换用户名时改成自己的家目录绝对路径**。niri 不展开 `$HOME`。
+These values are literal. **Use the absolute home directory for the target account.** niri does not expand `$HOME` here.
 
 ## Autostart
 
-`niri/startup.kdl` 里:
+The startup command lives in `niri/startup.kdl`.
 
 ```kdl
 spawn-at-startup "qs" "-p" "/home/yituoren/.config/quickshell/mine" "-d"
 ```
 
-niri 进程启动时 spawn,子进程继承 niri 的环境(包含上面的 `QML_IMPORT_PATH`)。改了 startup.kdl 要**重启 niri** 才让新的 spawn 生效 —— 已经运行的 qs 不会被替换。
+niri starts qs with its environment, including `QML_IMPORT_PATH`. Updated startup commands run at the next niri session. Existing processes keep running.
 
-`~/.config/quickshell/mine` 是符号链接指向 `~/.dotfiles/quickshell/mine/`。
+`~/.config/quickshell/mine` links to `~/.dotfiles/quickshell/mine/`.
 
 ## Verify
 
 ```bash
-# qs 跑着吗
+# Check for a running shell.
 pgrep -fa "qs.*mine"
 
-# layer surface 出现了吗(每屏一个 mine-shell)
+# Check for a mine-shell surface on each output.
 niri msg layers | grep mine-shell
 
-# 找最新的 qs log
-LATEST_LOG=$(ls -t /run/user/1000/quickshell/by-id/*/log.log | head -1)
-tail -20 "$LATEST_LOG"
-# 看 "Configuration Loaded",别看到 "module Caelestia.Blobs is not installed"
+# Read the log for the bar instance.
+qs -c mine log -t 20
 ```
 
 ## Quickshell ABI Compatibility
 
-Arch 的 `quickshell-git` 包是预编译的;系统 Qt 升级后 quickshell 没跟着 rebuild 会有 ABI 不匹配。看 qs log 开头如果:
+After a system Qt update, an older Quickshell build may report an ABI mismatch at startup:
 
 ```
 WARN: Quickshell was built against Qt 6.X but the system has updated to Qt 6.Y
 ```
 
-就跑 `yay -S quickshell-git` 强制重装。我自编的 `caelestia-blobs` plugin 是用系统当前 Qt 编的,跟 qs 要 ABI 一致才稳。
+Install a Quickshell build for the running Qt version. For a `quickshell-git` installation, rebuild with `yay -S quickshell-git`. The local `caelestia-blobs` plugin also uses the system Qt ABI.
 
 ## Hot-Reload Gotchas
 
-- 编辑器(neovim / zed / 等)直接保存 QML 文件 → qs 通过 inotify 热重载
-- **Claude Edit 工具 / 其它原子写工具 → 必须紧跟 `touch <file>`**。Edit 走原子替换换 inode,inotify 监听挂在老 inode 上接不到 MODIFY 事件。`touch` 不换 inode,补一个事件触发 reload
-- C++ plugin 改了不能热重载,见上面 "Iterating"
+- Saving QML in an editor such as Neovim or Zed triggers inotify reload.
+- After an atomic file replacement, run `touch <file>` to trigger reload. The original watch may still refer to the old inode.
+- For native plugin changes, follow the build and restart steps under **Iterating**.
+
+## Chat panel
+
+The Arch logo toggles the chat window independently of the dashboard and right-hand menus. The default width is one quarter of the output and the height is about 80%. Drag the toolbar to move it, or drag an edge or corner to resize. Each output remembers the window geometry for the shell session. The main shell preloads Cloud, controls animations and switches between Cloud and Local. A separate Quickshell host with the Qt argv patch renders the Cloud page within the panel geometry. Local starts `codex app-server` on demand with the existing Codex login, home working directory, the selected permissions profile and `on-request` approval. Enter sends and Shift+Enter inserts a newline. Responses continue when switching panels. The shell saves its thread ID and restores it with `thread/resume` after restart. `setwall` renders `chat/chat.css` from the matugen template for `https://chatgpt.com`. Sign in on first use. Cloud keeps its login cookies in the named `mine-chat` WebEngine profile. The Chrome button uses the existing browser session.
+
+Local history lists home-directory conversations by most recent update. Search by title, load more, browse archived conversations or restore one. Type `/` for commands, use the arrow keys to select, Tab to complete, and Enter to run. Start with `//` to send a literal slash.
+
+```text
+/new                     Start a conversation
+/resume [thread ID]      Browse history or open a home-directory conversation by ID
+/rename title            Rename the current conversation
+/fork                    Branch from the current conversation
+/archive                 Archive the current conversation
+/compact                 Compact the current context
+/model [model ID]        Select a model for subsequent Local messages
+/permissions [profile]   View or select the conversation permission profile
+/effort [level]          View or set reasoning effort for the current model
+/skills                  List skills available in the home directory
+/mcp                     List configured MCP servers
+/status                  Show account, workspace, model, effort and permissions
+/stop                    Stop the current response
+/help                    Show supported commands
+```
+
+Build the private launcher from the Quickshell v0.3.2 source directory with the Quickshell build dependencies installed.
+
+```sh
+patch -p1 < ~/.dotfiles/quickshell/mine/chat/quickshell-0.3.2-argv.patch
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build --target quickshell
+DESTDIR="$PWD/stage" cmake --install build --prefix /usr
+install -Dm755 stage/usr/bin/quickshell ~/.local/lib/mine-chat/quickshell
+```

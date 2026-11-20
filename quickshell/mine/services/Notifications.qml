@@ -1,18 +1,18 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-// Notifications —— 桌面通知中转 + 历史缓存
+// Desktop notification server and history
 //
-// 桥接 Quickshell.Services.Notifications.NotificationServer:
-//   - 注册 D-Bus name org.freedesktop.Notifications,接管系统通知
-//   - 每条通知收到时拍快照存入 history(即便客户端 expire/close 也保留)
-//   - dashboard 通知面板从 history 读、显示、可逐条 dismiss 或全清
+// Bridge Quickshell.Services.Notifications.NotificationServer:
+//   - Own org.freedesktop.Notifications on D-Bus to receive desktop notifications.
+//   - Snapshot incoming notifications so history survives expiration and closure.
+//   - The dashboard reads history and can dismiss one entry or clear the list.
 //
-// 选择拍快照而不是直接持有 Notification 对象:
-//   - 对象 close 后部分字段可能失效
-//   - 历史可以独立于 server 生命周期
+// Snapshots keep history independent of live Notification objects:
+//   - Some fields become invalid after close.
+//   - History has its own lifetime.
 //
-// keepOnReload=false:dev reload 时清空,避免重复显示
+// keepOnReload=false clears live notifications on reload to avoid duplicates.
 
 import QtQuick
 import Quickshell
@@ -21,17 +21,17 @@ import Quickshell.Services.Notifications
 Singleton {
     id: root
 
-    // 历史(最新在前)
+    // History, newest first
     property var history: []
     readonly property int count: root.history.length
 
-    // 当前展开的卡片 id(-1 表示无),用于通知面板点击展开/收起 body
+    // Expanded card ID (-1 for none). Click a notification to toggle its body.
     property int expandedId: -1
     function toggleExpand(id: int): void {
         root.expandedId = (root.expandedId === id) ? -1 : id
     }
 
-    // 上限:超过就丢最老的
+    // Drop the oldest entry when the limit is exceeded.
     readonly property int maxHistory: 50
 
     NotificationServer {

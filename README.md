@@ -1,83 +1,69 @@
-<div align="center">
-  <img src="assets/wallpaper.jpg" width="100%" style="object-fit: cover; border-radius: 10px;">
-  
-  <h1 align="center">My Arch Linux Dotfiles</h1>
+# My Arch Linux Dotfiles
 
-  <p align="center">
-    <strong>A personalized, aesthetic, and functional configuration for Arch Linux.</strong>
-  </p>
+My Wayland desktop runs niri with a custom Quickshell bar, dashboard, chat panel and lock screen. SDDM handles login. Changing the wallpaper with `setwall` updates the desktop palette, terminals and login theme together.
 
-  <p align="center">
-    <img src="https://img.shields.io/badge/Arch%20Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white" alt="Arch Linux" />
-    <img src="https://img.shields.io/badge/Hyprland-00A4A6?style=for-the-badge&logo=c&logoColor=white" alt="Hyprland" />
-    <img src="https://img.shields.io/badge/WezTerm-3C2C46?style=for-the-badge&logo=wezterm&logoColor=white" alt="WezTerm" />
-    <img src="https://img.shields.io/badge/Zsh-F15A24?style=for-the-badge&logo=zsh&logoColor=white" alt="Zsh" />
-  </p>
-  
-  <p align="center">
-    <a>🖼️ Gallery</a> •
-    <a>🧩 Components</a> •
-    <a>❤️ Acknowledgements</a>
-  </p>
-</div>
+![Wallpaper from the collection](assets/wallpaper.jpg)
 
-<br />
+## Desktop software
 
-> Welcome to my personal sanctuary of configurations. These dotfiles represent my journey in crafting a workflow that is both productive and visually pleasing. Feel free to explore, copy, and adapt!
->
-> **⭐ If you find this helpful, please consider giving this repo a star!**
+| Software | Where it is used | Configuration |
+| --- | --- | --- |
+| niri | Scrolling layout, workspaces, overview, shortcuts, screenshots and color picker | [Session setup](docs/niri.md) |
+| Quickshell (`qs`), Qt Quick, Caelestia.Blobs | Per-output bar, popups, tray, notifications and dashboard. The locally built C++ plugin draws the joined bar and popup and supplies their blur geometry. | [Shell setup and plugin build](docs/quickshell.md) |
+| Quickshell IdleMonitor, systemd-logind, PAM, Python with PyGObject | Lock after 5 idle minutes, power off displays after 10 and suspend after 15. The session lock also runs before sleep. | [Lock and idle units](docs/quickshell.md#session-lock) |
+| SDDM, ImageMagick | Qt 6 greeter with a blurred copy of the current wallpaper and a password field shared with the session lock | [Login theme installation](sddm/README.md) |
+| awww, matugen, jq | `awww-daemon` displays the wallpaper. `matugen` extracts Material You colors and renders GTK, KDE, fuzzel and chat themes. `jq` reads the palette for terminals. | [Wallpaper and colors](docs/colors.md) |
+| xdg-desktop-portal-gtk, GNOME Keyring | GTK handles portal requests such as file selection. GNOME Keyring provides the Secret portal. | [niri portal preferences](xdg-desktop-portal/niri-portals.conf) |
+| Fcitx5, Rime | Chinese input with Rime-Ice. Fcitx starts with the session. The input profile and Autumn theme live in the user account. | [Startup](niri/startup.kdl) · [Environment](niri/environment.kdl) |
+| Maple Mono NF CN, Material Symbols Rounded, Bibata Modern Classic | Terminal and launcher text, shell icons and the niri pointer | [WezTerm](wezterm/wezterm.lua) · [fuzzel](fuzzel/fuzzel.ini) · [Cursor](niri/startup.kdl) |
 
----
+The account also uses Darkly for KDE widgets, Breeze Plus icons and Google Sans Flex for GTK text. The generated KDE palette is defined in [MineDesktop.colors](matugen/templates/kde/MineDesktop.colors).
 
-## 🖼️ Gallery
+## Dashboard and devices
 
-<div align="center">
-  <img src="assets/appearance.jpg" alt="Desktop Appearance" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-  <br>
-  <i>The wallpaper shown above can be found in <code>assets/wallpaper.jpg</code>.</i>
-</div>
+| Software or service | What it does | Configuration |
+| --- | --- | --- |
+| MPRIS, playerctl | The Media tab reads track information and controls the selected player through MPRIS. niri's play/pause, next and previous keys call `playerctl`. | [Media guide](docs/media.md) |
+| CAVA | Samples the output mix for the bar spectrum and the ring around the album cover | [Spectrum settings](quickshell/mine/cava.conf) |
+| PipeWire, WirePlumber, pipewire-pulse | `wpctl` adjusts volume and mute. `pactl` lists and selects output devices through the PulseAudio-compatible server. | [Audio and playback checks](docs/media.md) |
+| Plasma Browser Integration | Optional Chrome tab discovery. The Media tab matches tab information with the browser's MPRIS reports. | [Browser media](docs/media.md#browser-media) |
+| LRCLIB, NetEase Cloud Music | Supply lyrics when the player omits them. Instrumental tracks leave the lyrics area empty. | [Lyrics](docs/media.md#lyrics) |
+| EasyEffects | Optional PipeWire effects processor. The startup hook runs it when the executable is installed. | [Startup](niri/startup.kdl) |
+| NetworkManager, plasma-nm, BlueZ, BlueDevil | `nmcli` and `bluetoothctl` drive the quick controls. Network settings open the KDE module, and pairing opens `bluedevil-wizard`. | [Device controls](quickshell/mine/services/SystemStatus.qml) |
+| brightnessctl, ddcutil | Adjust the internal backlight and DDC/CI-capable external displays. Battery status comes from Linux sysfs. | [Brightness and battery](quickshell/mine/services/SystemStatus.qml) |
+| Taskwarrior (`task`), GTK (`gtk-launch`) | The dashboard calendar reads and edits tasks. App search launches desktop entries and opens terminal apps in WezTerm. | [Tasks](quickshell/mine/services/Tasks.qml) · [App search](quickshell/mine/modules/drawers/AppSearch.qml) |
+| GeoClue, curl, Python | Weather uses GeoClue or IP geolocation, Open-Meteo forecasts and an NMC station fallback. The shell starts the first fetch at login. | [Weather service](quickshell/mine/services/Weather.qml) |
+| Linux procfs and sysfs, df, nvidia-smi | The Control tab samples system metrics. NVIDIA metrics appear when the driver utility is available. | [System monitor](quickshell/mine/services/SysMonitor.qml) |
+| Qt WebEngine, Codex CLI | The Arch logo opens Cloud chat in a persistent WebEngine profile or Local chat through `codex app-server` in the home directory. Cloud uses a private Quickshell launcher. | [Chat setup and commands](docs/quickshell.md#chat-panel) |
 
----
+## Applications and shortcuts
 
-## 🧩 Components
+`Mod` is the Super key. The dashboard opens from the center of the bar. [All bindings](niri/binds.kdl)
 
-### 🖥️ Window Manager & Desktop
+| Shortcut | Software and action |
+| --- | --- |
+| `Mod+Space` / `Mod+V` | [fuzzel](docs/fuzzel.md) launches apps or selects clipboard history from cliphist. wl-clipboard provides `wl-paste` and `wl-copy`. |
+| `Mod+Return` / `Mod+T` | Open [WezTerm](docs/wezterm.md) or [Kitty](docs/kitty.md). [Zsh](docs/zsh.md) uses Zimfw, Powerlevel10k and eza. |
+| `Mod+E` | Open [Yazi](docs/yazi.md) in WezTerm. Dolphin is also available as a graphical file manager. |
+| `Mod+W` / `Mod+C` | Open Google Chrome or Zed. |
+| `Mod+Shift+S` / `Mod+Shift+C` | Use niri's region screenshot or copy a picked hex color. |
+| `Mod+Shift+X` | Select a region with slurp, capture it with grim and copy Tesseract OCR text. |
+| `Mod+Ctrl+L` / `Ctrl+Alt+Delete` | Lock the session or toggle the shell power menu. |
+| `Mod+Tab` / `Mod+Slash` | Open the niri overview or the searchable Quickshell shortcut sheet. |
 
-| Component | Description | Link |
-| :--- | :--- | :--- |
-| **Compositor** | **Hyprland** | [Repo](https://github.com/hyprwm/Hyprland) |
-| **Plugin** | **hyprscrolling** (Niri-like scrolling) | [Repo](https://github.com/hyprwm/hyprland-plugins) |
-| **Shell Config** | **illogical-impulse-quickshell** (Quickshell based) | [Repo](https://github.com/end-4/dots-hyprland) |
+Clash Verge uses a local mixed proxy port. The Zsh functions `start_proxy` and `stop_proxy` set or clear the HTTP proxy variables for the current shell. [Proxy configuration](clash-verge/config.yaml) · [Shell functions](zsh-config/.zshrc)
 
-### 🚀 Terminal & Shell
+## Configuration layout
 
-| Component | Description | Link |
-| :--- | :--- | :--- |
-| **Terminal** | **WezTerm** (GPU Accelerated) | [Repo](https://github.com/wezterm/wezterm) |
-| **Shell** | **Zsh** | - |
-| **Prompt** | **Powerlevel10k** | [Repo](https://github.com/romkatv/powerlevel10k) |
-| **Plugin Mgr** | **Zimfw** | [Repo](https://github.com/zimfw/zimfw) |
+The checkout lives at `~/.dotfiles`. niri and Kitty link their directories. WezTerm, fuzzel, matugen and Zsh link individual configuration files or template directories. Generated colors, lyrics caches and chat profiles live with their consumers. For another account, adjust absolute home paths in niri and the SDDM mount before linking.
 
-### ⌨️ Input Method (IME)
+1. Link the compositor configuration and portal selection. [niri guide](docs/niri.md)
+2. Link the desktop shell, build its QML plugin and link the idle and lock services. [Quickshell guide](docs/quickshell.md)
+3. Link matugen and `setwall`, then select a wallpaper. [Color guide](docs/colors.md)
+4. Install the login theme once a wallpaper has been selected. [SDDM guide](sddm/README.md)
 
-| Component | Description | Link |
-| :--- | :--- | :--- |
-| **Framework** | **Fcitx5** | [Repo](https://github.com/fcitx/fcitx5) |
-| **Engine** | **Rime** (中州韵) | [Repo](https://github.com/fcitx/fcitx5-rime) |
-| **Schema** | **Rime-Ice** (雾凇拼音) | [Repo](https://github.com/iDvel/rime-ice) |
-| **Theme** | **Candlelight** | [Repo](https://github.com/thep0y/fcitx5-themes-candlelight) |
+## Gallery and acknowledgements
 
----
+[Archived desktop screenshot](assets/appearance.jpg) · [Wallpaper collection](assets/)
 
-## ❤️ Special Thanks
-
-A huge shoutout to **9vvert** for his patience, guidance, and invaluable help during the installation and configuration of my Arch Linux system. This setup wouldn't be possible without his support.
-
-- 👨‍💻 **GitHub**: [9vvert](https://github.com/9vvert)
-- 🌐 **Website**: [9vvert.github.io](https://9vvert.github.io/)
-
----
-
-## 📄 License
-
-Feel free to use and modify these configurations. A star back to the original repo would be appreciated!
+Thanks to [9vvert](https://github.com/9vvert) for helping set up this Arch system. The shell's blob renderer is adapted from [Caelestia](https://github.com/caelestia-dots/shell). Feel free to use and adapt these personal configurations.

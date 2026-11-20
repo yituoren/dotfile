@@ -1,13 +1,13 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-// SysMonitor —— 系统资源监控
+// System resource monitoring
 //
-// 数据源 /proc 文件:每秒一次 Process 跑一行 sh 把所有需要的文件 cat 出来,
-// 中间用 ===NAME=== 分隔,QML 端 split 解析。比起每项一个 Process 省 fork。
-// 磁盘 `df` 调用较慢,单独 10s 一次。
+// Read the required /proc files in one shell process per second.
+// Separate them with ===NAME=== markers and parse in QML to avoid a process per metric.
+// Run the slower df query separately every ten seconds.
 //
-// 暴露指标:
+// Published metrics:
 //   CPU:     cpuUsage(0-1) / cpuPerCore[] / cpuTempC / cpuHistory[]
 //   Memory:  memUsedGB / memTotalGB / memUsagePct / swapUsedGB / swapTotalGB
 //   Load:    load1 / load5 / load15
@@ -15,7 +15,7 @@ pragma ComponentBehavior: Bound
 //   Network: netRxBps / netTxBps / netRxHistory[] / netTxHistory[]
 //   Disk:    diskMounts[]
 //
-// enabled 标志由消费者(目前 ControlTab)切换,关闭时停 Timer 省 CPU
+// Consumers such as ControlTab set enabled. Stop the timer while unused.
 
 import QtQuick
 import Quickshell
@@ -77,7 +77,7 @@ Singleton {
     // ============ Disk ============
     property var diskMounts: []
 
-    // ============ 内部 state ============
+    // ============ Internal state ============
     property var _lastPerCore: null
     property var _lastNetStat: null
     property real _lastTickMs: 0
@@ -114,9 +114,9 @@ Singleton {
     }
 
     function parseTick(text: string): void {
-        // 行扫描:遇到 ===NAME=== 切 section,其余行 push 到当前 section 缓冲
-        // (之前用 text.split("===") 会把 ===STAT=== 切成 ["", "STAT", "\n内容..."]
-        //  错位导致 section name + content 不在同一片,所有解析失败)
+        // Switch sections on a ===NAME=== marker and collect subsequent lines in that section.
+        // Splitting on === alone separated each heading from its data,
+        //  so the parser could not associate the section names and contents.
         const lines = text.split("\n")
         const map = {}
         let curName = null
@@ -173,7 +173,7 @@ Singleton {
         }
     }
 
-    // 启动读 CPU 型号(只读一次,基本不变)
+    // Read the CPU model once at startup.
     Process {
         id: cpuModelProc
         running: true
@@ -300,7 +300,7 @@ Singleton {
             const name = parts[0]
             const val = parseInt(parts[1], 10)
             if (!val) continue
-            // 优先 CPU 温度源(AMD: k10temp / zenpower, Intel: coretemp)
+            // Prefer k10temp or zenpower on AMD and coretemp on Intel.
             if (name === "k10temp" || name === "coretemp" || name === "zenpower") {
                 root.cpuTempC = val / 1000
                 return
@@ -317,7 +317,7 @@ Singleton {
             const total = parseInt(parts[1], 10)
             const used = parseInt(parts[2], 10)
             const mount = parts[parts.length - 1]
-            if (total < 1024 * 1024 * 100) continue   // 跳过 < 100MB
+            if (total < 1024 * 1024 * 100) continue   // Skip devices under 100 MB.
             out.push({
                 mount: mount,
                 used: used,

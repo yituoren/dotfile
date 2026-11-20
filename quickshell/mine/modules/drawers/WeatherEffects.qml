@@ -1,15 +1,15 @@
 pragma ComponentBehavior: Bound
 
-// WeatherEffects —— 根据 Weather.currentCode 在 popup 内叠粒子动效
+// Overlay weather particles according to Weather.currentCode.
 //
-// 当前实现:
-//   - 雨(rain):60 根斜雨滴细线,随机 x / 速度 / 长度循环下落
-//   - 雪(snow):40 颗圆,慢速下落 + 左右摆动
-//   - 雷(thunder):整层全屏白闪 + opacity 衰减,每 4~8s 触发一次
-//   - 晴 / 多云 / 雾:无效果(留 hook)
+// Supported effects:
+//   - Rain: 60 slanted strokes with randomized positions, speeds and lengths.
+//   - Snow: 40 circles drift slowly down and sideways.
+//   - Thunder: flash the entire layer and fade it every 4 to 8 seconds.
+//   - Clear, cloudy and foggy conditions have no particle effect.
 //
-// 用法:
-//   WeatherEffects { anchors.fill: parent }  ← 放在 WeatherTab 的根 Item 里、控件之上
+// Example:
+//   WeatherEffects { anchors.fill: parent } belongs above the controls inside WeatherTab.
 
 import QtQuick
 import qs.services
@@ -18,7 +18,7 @@ Item {
     id: root
     clip: true
 
-    // 切换天气时简单 0.4s 内淡入淡出,避免效果突变
+    // Crossfade changing conditions over 0.4 seconds.
     Behavior on opacity { NumberAnimation { duration: 400 } }
 
     // ============ Rain ============
@@ -27,7 +27,7 @@ Item {
         delegate: Rectangle {
             id: drop
             required property int index
-            // 随机参数 —— 一次绑定固定值,避免每帧重算
+            // Bind random parameters once to keep them stable across frames.
             readonly property real speedMs: 700 + (drop.index * 113) % 700
             readonly property real lengthPx: 10 + (drop.index * 37) % 8
             readonly property real xStart: (drop.index * 71) % Math.max(1, root.width)
@@ -46,9 +46,9 @@ Item {
                 duration: drop.speedMs
                 loops: Animation.Infinite
                 running: Weather.isPrecip
-                // 起始 delay 让所有雨滴错峰
+                // Stagger the initial drop delays.
                 Component.onCompleted: {
-                    // 起手让 from 的 y 加一个偏移
+                    // Offset the initial y coordinate.
                 }
             }
         }
@@ -79,7 +79,7 @@ Item {
                 loops: Animation.Infinite
                 running: Weather.isSnow
             }
-            // 左右摆动
+            // Lateral drift
             SequentialAnimation on x {
                 loops: Animation.Infinite
                 running: Weather.isSnow
@@ -102,7 +102,7 @@ Item {
             running: Weather.isThunder
             loops: Animation.Infinite
             PauseAnimation { duration: 4000 + Math.floor(Math.random() * 4000) }
-            // 双闪
+            // Double flash
             NumberAnimation { target: flash; property: "opacity"; from: 0; to: 0.4; duration: 60 }
             NumberAnimation { target: flash; property: "opacity"; from: 0.4; to: 0; duration: 80 }
             PauseAnimation { duration: 120 }

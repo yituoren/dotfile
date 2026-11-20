@@ -1,8 +1,8 @@
-// 显示器
+// Outputs
 //
-// ★ mode 的刷新率必须与显示器实际汇报的值一致(可能是 144.000 也可能是
-//   143.998 之类)。第一次进 niri 后用 `niri msg outputs` 查准确字符串,
-//   再回填到下面。若 mode 写错,niri 会回退到 preferred 模式。
+// The refresh rate must match the advertised mode exactly, including fractions such as
+//   144.000 or 143.998. Read the exact mode with niri msg outputs and enter it below.
+//   niri falls back to the preferred mode if the configured one is unavailable.
 
 output "eDP-1" {
     mode "2560x1600@144.000"

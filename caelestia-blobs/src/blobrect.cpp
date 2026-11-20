@@ -14,6 +14,8 @@ BlobRect::~BlobRect() {
 
 void BlobRect::updatePolish() {
     BlobShape::updatePolish();
+    if (m_trackBlur || !m_blurRects.isEmpty())
+        updateBlurRects();
 
     if (m_physicsActive) {
         // Check if deformation is visually imperceptible
@@ -241,5 +243,85 @@ void BlobRect::checkAtRest(float speed) {
         emit rawDeformMatrixChanged();
         updateCenteredDeformMatrix();
         m_physicsActive = false;
+    }
+}
+
+// Use the render pass's cached inverse deformation, corner radii and cubic blend.
+// Only the part below gradientTop is translucent and needs compositor blur.
+static float roundedDistance(const BlobRectData& r, float x, float y) {
+    x -= r.cx + r.offsetX;
+    y -= r.cy + r.offsetY;
+    const float u = r.invDeform[0] * x + r.invDeform[2] * y;
+    const float v = r.invDeform[1] * x + r.invDeform[3] * y;
+    const float radius = r.radius[u > 0 ? (v > 0 ? 1 : 0) : (v > 0 ? 2 : 3)];
+    const float dx = std::abs(u) - r.hw + radius;
+    const float dy = std::abs(v) - r.hh + radius;
+    const float px = std::max(dx, 0.f), py = std::max(dy, 0.f);
+    return (std::min(std::max(dx, dy), 0.f) + std::sqrt(px * px + py * py) - radius)
+        * std::max(r.minEig, 0.01f);
+}
+
+void BlobRect::setTrackBlur(bool enabled) {
+    if (m_trackBlur == enabled) return;
+    m_trackBlur = enabled;
+    emit trackBlurChanged();
+    polish();
+}
+
+void BlobRect::updateBlurRects() {
+    QVariantList spans;
+    if (m_trackBlur && m_group && m_cachedMyIndex >= 0) {
+        const auto& popup = m_cachedRects[m_cachedMyIndex];
+        const float k = m_group->smoothing();
+        const int left = std::floor(popup.cx - popup.screenHalfX - k);
+        const int right = std::ceil(popup.cx + popup.screenHalfX + k);
+        const int bottom = std::ceil(std::max(popup.cy + popup.screenHalfY, float(m_group->gradientTop()) + k));
+        QRect run;
+        for (int y = std::floor(m_group->gradientTop()); y < bottom; ++y) {
+            auto inside = [&](int x) {
+                float d = roundedDistance(popup, x + 0.5f, y + 0.5f);
+                for (int i = 0; i < m_cachedRects.size(); ++i) {
+                    if (i == m_cachedMyIndex || (popup.excludeMask & (1 << i))) continue;
+                    const float b = roundedDistance(m_cachedRects[i], x + 0.5f, y + 0.5f);
+                    const float h = k > 0 ? std::max(0.f, 1.f - std::abs(d - b) / k) : 0.f;
+                    d = std::min(d, b) - h * h * h * k / 6.f;
+                }
+                return d <= 0;
+            };
+            // The bar and dashboard have one continuous span per translucent row.
+            const float dy = y + 0.5f - popup.cy;
+            int middle = std::clamp(int(popup.cx - dy * popup.invDeform[2] / popup.invDeform[0]), left, right);
+            if (!inside(middle)) {
+                // A tilted rounded corner can extend beyond the local vertical centreline.
+                while (middle > left && !inside(middle)) --middle;
+                if (!inside(middle)) {
+                    middle = std::max(left, int(popup.cx));
+                    while (middle < right && !inside(middle)) ++middle;
+                    if (!inside(middle)) continue;
+                }
+            }
+            int lo = left, hi = middle;
+            while (lo < hi) {
+                const int x = lo + (hi - lo) / 2;
+                if (inside(x)) hi = x; else lo = x + 1;
+            }
+            const int start = lo;
+            lo = middle; hi = right;
+            while (lo < hi) {
+                const int x = lo + (hi - lo + 1) / 2;
+                if (inside(x)) lo = x; else hi = x - 1;
+            }
+            if (run.left() == start && run.right() == lo && run.bottom() + 1 == y)
+                run.setBottom(y);
+            else {
+                if (!run.isEmpty()) spans.append(run);
+                run = QRect(start, y, lo - start + 1, 1);
+            }
+        }
+        if (!run.isEmpty()) spans.append(run);
+    }
+    if (spans != m_blurRects) {
+        m_blurRects.swap(spans);
+        emit blurRectsChanged();
     }
 }

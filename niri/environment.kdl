@@ -1,32 +1,33 @@
-// 环境变量
-// 注意:environment {} 的值是字面字符串,不做 $HOME / $VAR 展开。
+// Environment variables
+// Values in environment {} are literal. Use absolute paths for $HOME and other variables.
 
 environment {
-    // PATH:补 ~/.local/bin —— niri 默认 PATH 不带它,导致 spawn 跑不到用户二进制
-    // (zed/setwall 等都装在那里)。值是字面字符串,要写绝对路径。
+    // Include ~/.local/bin in PATH so niri can spawn user-installed commands
+    // such as zed and setwall. The literal PATH needs the absolute directory name.
     PATH "/home/yituoren/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin"
 
-    // 输入法 fcitx5
+    // Fcitx5 input method
     QT_IM_MODULE "fcitx"
     XMODIFIERS "@im=fcitx"
     SDL_IM_MODULE "fcitx"
     GLFW_IM_MODULE "ibus"
     INPUT_METHOD "fcitx"
 
-    // Qt / 主题
+    // Qt and theming
     QT_QPA_PLATFORM "wayland"
     QT_QPA_PLATFORMTHEME "kde"
     XDG_MENU_PREFIX "plasma-"
 
-    // 自定义 QML 模块搜索路径(自编 Caelestia.Blobs SDF plugin 装在用户级)
-    // Qt 默认只搜索 /usr/lib/qt6/qml,装到 ~/.local/share/qt6/qml/ 必须显式声明
+    // QML search path for the user-installed Caelestia.Blobs SDF plugin
+    // Qt searches /usr/lib/qt6/qml by default. Add ~/.local/share/qt6/qml explicitly.
     QML_IMPORT_PATH "/home/yituoren/.local/share/qt6/qml"
     QML2_IMPORT_PATH "/home/yituoren/.local/share/qt6/qml"
 
-    // 杂项
+    // Miscellaneous
     ELECTRON_OZONE_PLATFORM_HINT "auto"
     WEBKIT_DISABLE_COMPOSITING_MODE "1"
     TERMINAL "wezterm"
+    ZED_ALLOW_EMULATED_GPU "1"
 
     // NVIDIA
     LIBVA_DRIVER_NAME "nvidia"

@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
-// Clock —— HH:mm 时钟显示
-// 详细日期 + 秒数 等留给后续 hover 控制面板里的日历组件,这里保持极简
+// Display the time in HH:mm format.
+// Keep the detailed date and seconds in the calendar panel.
 
 import QtQuick
 import qs.services

@@ -13,7 +13,7 @@ class BlobGroup : public QObject {
     QML_ELEMENT
     Q_PROPERTY(qreal smoothing READ smoothing WRITE setSmoothing NOTIFY smoothingChanged)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
-    // 顶 → 底渐变;不设(或 colorBottom==color)时退化为单色
+    // Vertical gradient. An unset or identical bottom color gives a solid fill.
     Q_PROPERTY(QColor colorBottom READ colorBottom WRITE setColorBottom NOTIFY colorBottomChanged)
     Q_PROPERTY(qreal gradientTop READ gradientTop WRITE setGradientTop NOTIFY gradientTopChanged)
     Q_PROPERTY(qreal gradientBottom READ gradientBottom WRITE setGradientBottom NOTIFY gradientBottomChanged)
@@ -63,7 +63,7 @@ signals:
 private:
     qreal m_smoothing = 32.0;
     QColor m_color{ 0x44, 0x88, 0xff };
-    QColor m_colorBottom{ 0x44, 0x88, 0xff };  // 默认 = color,退化为无渐变
+    QColor m_colorBottom{ 0x44, 0x88, 0xff };  // Defaults to color for a solid fill.
     qreal m_gradientTop = 0;
     qreal m_gradientBottom = 0;
     QList<BlobShape*> m_shapes;

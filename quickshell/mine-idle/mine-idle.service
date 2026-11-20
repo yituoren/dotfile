@@ -1,0 +1,9 @@
+[Unit]
+Description=Quickshell idle timers for niri
+After=graphical-session.target
+PartOf=graphical-session.target mine-sleep-lock.service
+
+[Service]
+ExecStart=/usr/bin/qs -c mine-idle
+Restart=on-failure
+RestartSec=1s

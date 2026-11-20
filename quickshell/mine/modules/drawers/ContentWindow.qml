@@ -1,19 +1,20 @@
 pragma ComponentBehavior: Bound
 
-// ContentWindow —— 每屏一个全屏 PanelWindow,bar + popup 都画在同一个 scene graph 内,
-// 这样 Caelestia.Blobs 的 SDF 着色器才能把它们 metaball 融合(BlobGroup 跨 PanelWindow 不工作)。
+// One fullscreen PanelWindow per output places the bar and popup in the same scene graph.
+// Caelestia.Blobs needs this shared scene graph for SDF metaball blending.
 //
-// 结构(从下到上):
-//   1. BlobGroup + 多个 BlobRect(bar / popup)—— SDF 渲染的形状层
-//   2. Bar widgets(ArchLogo / WorkspaceIndicator / ...)在 bar 形状之上
-//   3. Popup content(Loader,各种 popup component)在 popup 形状之上
-//   4. Scrim MouseArea —— popup 开时盖全屏(实际放在 popup 之下),click 关 popup
+// Layer order:
+//   1. BlobGroup and BlobRects draw the bar and popup shapes.
+//   2. Bar widgets such as ArchLogo and WorkspaceIndicator draw over the bar.
+//   3. A Loader places the active popup's content over its shape.
+//   4. A fullscreen scrim below the popup handles outside clicks.
 //
-// 输入 mask:
-//   - popup 关:只 bar 区域可点(其余穿透到桌面)
-//   - popup 开:bar + popup + scrim 全可点(scrim 处理外部点击 → 关 popup)
+// Input mask:
+//   - Closed: only the bar receives input. Other clicks pass through.
+//   - Open: the bar and popup receive input, and the scrim handles outside clicks.
 
 import QtQuick
+import QtQuick.Controls as Controls
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -25,18 +26,17 @@ import qs.modules.bar.widgets
 PanelWindow {
     id: root
     required property var modelData
+    signal logoutRequested()
     screen: modelData
 
     WlrLayershell.namespace: "mine-shell"
-    // Overlay 而非 Top:让 BlurPanel(Top 层,只覆盖 popup 区域,niri 给它开 blur)
-    // 渲染在 mine-shell 下方;mine-shell 的 SDF popup 半透 colorBottom 让 blur 画面透过来
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    // OnDemand:popup 里的 TextField(dashboard 添加 todo 输入框)点击时能拿键盘焦点。
-    // 默认 None 时 layer-shell 完全不接收键盘事件,输入框失明。
+    // OnDemand lets a clicked TextField, such as the dashboard task entry, take keyboard focus.
+    // With the default None mode the layer surface receives no keyboard events.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-    // 走 niri layout.kdl 的 struts 给 bar 留位(struts.top=0,bar 用 exclusive_zone),
-    // 这里因为是全屏 anchor,exclusive_zone 没法用,改回靠 struts 预留
+    // Reserve bar space through the struts in niri/layout.kdl.
+    // A fullscreen anchor cannot reserve only the bar's height with an exclusive zone.
 
     anchors {
         top: true
@@ -47,22 +47,22 @@ PanelWindow {
 
     color: "transparent"
 
-    // ---- bar 几何常量 ----
+    // ---- Bar geometry ----
     readonly property int barTopMargin: 8
     readonly property int barSideMargin: 8
-    readonly property int barHeight: 44
-    readonly property int barRadius: 16
+    readonly property int barHeight: Math.round(44 * Theme.uiScale)
+    readonly property int barRadius: Math.round(16 * Theme.uiScale)
 
-    // bar 是否在这块屏(scrim/popup 也据此判断)
+    // Whether the bar, scrim and popup belong to this output
     readonly property bool popupOnThisScreen: PopupManager.currentScreen === root.modelData
 
-    // popup 几何(屏幕本地坐标)
-    // popupScale:[0,1],SDF 形状和 popup 实际显示尺寸都乘它。
-    //   默认 = openAmount(0→1 全幅展开)
-    //   scaleFrom > 0(如 dashboard)→ 形状从 scaleFrom 起跳,出场幅度小;不展开到 0% 而是 80%→100% 微动
-    //   close 时 openAmount → 0,scale 也回到 0(经过 scaleFrom 后 bezier 尾段快速归零)
-    // 只看 entry(不 fallback lastEntry):关闭时 entry → null,scaleFrom 立刻回 0,
-    // popupScale 退化成 = openAmount,关闭动画就是从 1 → 0 直接收(不会"先缩到 80% 再砰一下消失")
+    // Popup geometry in output-local coordinates
+    // Scale both the SDF and the popup content by popupScale in the range [0, 1].
+    //   By default openAmount animates through the entire range.
+    //   A positive scaleFrom, as on the dashboard, limits the opening motion to the final portion.
+    //   On close, openAmount and scale return to zero.
+    // Read the current entry here so scaleFrom returns to zero as soon as closing begins.
+    // This lets the popup shrink continuously to zero.
     readonly property real popupScaleFrom: {
         const e = PopupManager.entry
         return e && e.scaleFrom !== undefined ? e.scaleFrom : 0
@@ -75,159 +75,197 @@ PanelWindow {
         if (oa <= 0) return 0
         return Math.min(1, sf + (1 - sf) * oa)
     }
-    readonly property real popupWidth: PopupManager.displayWidth * root.popupScale
-    // 高度 = 注册表里的 displayHeight + popup 自己动态加的 extraHeight(dropdown 展开用)
-    readonly property real popupHeight: (PopupManager.displayHeight + PopupManager.extraHeight) * root.popupScale
-    readonly property real popupX: PopupManager.animatedAnchorX - root.popupWidth * PopupManager.triggerRelativeX
-    readonly property real popupY: root.barTopMargin + root.barHeight + 4  // 留 4px 给 SDF metaball blend 空间
+    readonly property real popupUiScale: PopupManager.popupScaleFor(PopupManager.entry ?? PopupManager.lastEntry, root.modelData)
+    readonly property real popupWidth: PopupManager.displayWidth * root.popupScale * root.popupUiScale
+    // Add dropdown expansion (extraHeight) to the registered displayHeight.
+    property real trayExtraHeight: {
+        if (!trayLoader.item || PopupManager.lastEntry !== PopupManager.registry.tray) return 0
+        const base = PopupManager.registry.tray.height
+        const available = (root.height - root.popupY - root.barSideMargin) / root.popupUiScale
+        return Math.max(0, Math.min(available, trayLoader.item.pageHeight + 20) - base)
+    }
+    Behavior on trayExtraHeight {
+        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+    }
+    readonly property real popupHeight: (PopupManager.displayHeight + PopupManager.extraHeight
+            + (PopupManager.lastEntry === PopupManager.registry.tray ? root.trayExtraHeight : 0)) * root.popupScale * root.popupUiScale
+    readonly property real barRight: root.width - root.barSideMargin
+    readonly property real chatTopLimit: barTopMargin + barHeight
+    readonly property real chatMaxWidth: Math.max(1, width - 2 * barSideMargin)
+    readonly property real chatMaxHeight: Math.max(1, height - chatTopLimit - barSideMargin)
+    readonly property real chatMinWidth: Math.min(chatMaxWidth, Math.round(270 * Theme.uiScale))
+    readonly property real chatMinHeight: Math.min(chatMaxHeight, Math.round(200 * Theme.uiScale))
+    // Dragging replaces the default geometry for this output.
+    property rect chatGeometry: {
+        const h = Math.min(Math.round(height * 0.8), height - 2 * chatTopLimit)
+        return Qt.rect(3 * barSideMargin, Math.round((height - h) / 2), Math.round(width / 4), h)
+    }
+    function clamp(value: real, low: real, high: real): real {
+        return Math.max(low, Math.min(value, high))
+    }
+    readonly property real chatFullWidth: clamp(chatGeometry.width, chatMinWidth, chatMaxWidth)
+    readonly property real chatFullHeight: clamp(chatGeometry.height, chatMinHeight, chatMaxHeight)
+    function boundedChatPosition(x: real, y: real): point {
+        return Qt.point(clamp(x, barSideMargin, width - barSideMargin - chatFullWidth),
+                        clamp(y, chatTopLimit, height - barSideMargin - chatFullHeight))
+    }
+    readonly property point chatOrigin: boundedChatPosition(chatGeometry.x, chatGeometry.y)
 
-    // ---- 输入 mask ----
-    // popup 关:只 bar 区域捕捉(其余穿透);popup 开:整屏(scrim 捕捉外部 click)
-    // 注意 popup 开时所有屏(包括 popup 不在的屏)都设 mask=null —— 这样点别屏空白处也能关 popup
-    mask: PopupManager.isOpen ? null : barMask
+    function resizeChat(start: rect, edges: int, dx: real, dy: real): void {
+        let left = start.x, right = start.x + start.width
+        let top = start.y, bottom = start.y + start.height
+        if (edges & Qt.LeftEdge) left = clamp(left + dx, barSideMargin, right - chatMinWidth)
+        if (edges & Qt.RightEdge) right = clamp(right + dx, left + chatMinWidth, width - barSideMargin)
+        if (edges & Qt.TopEdge) top = clamp(top + dy, chatTopLimit, bottom - chatMinHeight)
+        if (edges & Qt.BottomEdge) bottom = clamp(bottom + dy, top + chatMinHeight, height - barSideMargin)
+        chatGeometry = Qt.rect(left, top, right - left, bottom - top)
+    }
+    property real chatAmount: Chat.opened && Chat.outputName === modelData.name ? 1 : 0
+    Behavior on chatAmount {
+        NumberAnimation { duration: 320; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1] }
+    }
+    readonly property real popupX: {
+        const centered = (root.width - root.popupWidth) / 2
+        const right = PopupManager.anchorX + (root.barRight - PopupManager.anchorX) * root.popupRawAmount
+        return centered + PopupManager.alignment * (right - root.popupWidth - centered)
+    }
+    // Straighten the lower-right corner near an attached menu and restore it as the menu closes.
+    readonly property real rightJoin: {
+        const gap = Math.max(0, root.barRight - (root.popupX + root.popupWidth))
+        return Math.max(0, PopupManager.alignment) * Math.min(1, root.popupWidth / root.barRadius)
+                * Math.max(0, 1 - gap / root.barRadius)
+    }
+    readonly property real leftJoin: Math.min(1, chatMenu.width / barRadius)
+            * Math.max(0, 1 - (chatMenu.y - barTopMargin - barHeight) / barRadius)
+            * Math.max(0, 1 - Math.max(0, chatMenu.x - barSideMargin) / barRadius)
+    readonly property real popupY: barTopMargin + barHeight + 4 * (1 - rightJoin)
+
+    // A reloaded panel can inherit the old Wayland surface and its last blur.
+    // Attach an explicit empty region on every inactive surface, including at startup.
+    BackgroundEffect.blurRegion: popupShape.trackBlur ? dashboardBlur : emptyBlur
+    Region { id: emptyBlur }
     Region {
-        id: barMask
-        x: root.barSideMargin
-        y: root.barTopMargin
-        width: root.width - 2 * root.barSideMargin
-        height: root.barHeight
+        id: dashboardBlur
+        property var bands: []
+        property Component bandType: Component { Region {} }
+
+        // Reuse Wayland region rectangles as the SDF scanline runs change.
+        function setBands(rects): void {
+            for (let i = bands.length; i < rects.length; ++i) {
+                const band = bandType.createObject(dashboardBlur)
+                bands.push(band)
+                regions.push(band)
+            }
+            for (let i = 0; i < bands.length; ++i) {
+                const b = bands[i]
+                if (i >= rects.length) {
+                    b.width = 0
+                    continue
+                }
+                const r = rects[i]
+                b.x = r.x
+                b.y = r.y
+                b.width = r.width
+                b.height = r.height
+            }
+        }
     }
 
-    // ==================== SDF Blob 形状层 ====================
+    // ---- Input mask ----
+    // The scrim covers every output while a menu is open. The web viewport
+    // has its own Wayland surface and must receive its own pointer events.
+    mask: Region {
+        x: PopupManager.isOpen ? 0 : root.barSideMargin
+        y: PopupManager.isOpen ? 0 : root.barTopMargin
+        width: PopupManager.isOpen ? root.width : root.width - 2 * root.barSideMargin
+        height: PopupManager.isOpen ? root.height : root.barHeight
+        Region {
+            x: Math.floor(chatMenu.x)
+            y: Math.floor(chatMenu.y)
+            width: Math.ceil(chatMenu.width)
+            height: Math.ceil(chatMenu.height)
+        }
+        Region {
+            readonly property var viewport: Chat.client?.connected && Chat.viewport?.output === root.modelData.name
+                    ? Chat.viewport : null
+            intersection: Intersection.Subtract
+            x: viewport?.x ?? 0
+            y: viewport?.y ?? 0
+            width: viewport ? Math.round(viewport.width * viewport.zoom) : 0
+            height: viewport ? Math.round(viewport.height * viewport.zoom) : 0
+        }
+    }
+
+    // ==================== SDF shape layer ====================
     Item {
         anchors.fill: parent
+        // Smooth minimum can bulge a few pixels where two straight edges meet.
+        anchors.rightMargin: root.barSideMargin
+        anchors.leftMargin: root.barSideMargin
+        clip: root.rightJoin > 0 || root.leftJoin > 0
 
         BlobGroup {
             id: blobGroup
             color: "#000000"
-            // 平滑因子越大,bar 跟 popup 越容易融合成一坨(metaball)
+            // A larger smoothing factor joins the bar and popup over a wider distance.
             smoothing: 32
 
-            // 渐变只给标了 transparent 的 popup(目前只有 dashboard);其它 popup colorBottom = 纯黑 = color,mix 退化
-            // 关闭动画时 entry → null,用 lastEntry 保住状态;否则关闭时 popup 还在缩 colorBottom 就先变回纯黑了
+            // Only transparent entries use a gradient. Others use black for both endpoint colors.
+            // Keep lastEntry during closing so the gradient survives until the popup has shrunk.
             readonly property bool popupTransparent: {
                 const e = PopupManager.entry ?? PopupManager.lastEntry
                 return e && e.transparent === true
             }
-            colorBottom: blobGroup.popupTransparent
-                ? Qt.rgba(0, 0, 0, 0.35)
-                : Qt.rgba(0, 0, 0, 1)
+            colorBottom: blobGroup.popupTransparent ? Qt.rgba(0, 0, 0, 0.35) : "#000000"
             gradientTop: root.popupY
             gradientBottom: root.popupY + root.popupHeight
         }
 
-        // bar 形状:顶部固定矩形
+        // Fixed top bar rectangle
         BlobRect {
             id: barShape
             group: blobGroup
-            x: root.barSideMargin
+            x: 0
             y: root.barTopMargin
             implicitWidth: root.width - 2 * root.barSideMargin
             implicitHeight: root.barHeight
             radius: root.barRadius
+            bottomLeftRadius: root.barRadius * (1 - root.leftJoin)
+            bottomRightRadius: root.barRadius * (1 - root.rightJoin)
         }
 
-        // popup 形状:位置 / 尺寸跟 PopupManager 动画状态走
+        // Popup position and dimensions follow the PopupManager animation.
         BlobRect {
             id: popupShape
+            trackBlur: root.popupOnThisScreen && blobGroup.popupTransparent && visible
+            onBlurRectsChanged: dashboardBlur.setBands(blurRects)
             group: blobGroup
             visible: root.popupWidth > 0.5 && root.popupHeight > 0.5
-            x: root.popupX
+            x: root.popupX - root.barSideMargin
             y: root.popupY
             implicitWidth: root.popupWidth
             implicitHeight: root.popupHeight
+            deformScale: 0
             radius: root.barRadius
+            topRightRadius: root.barRadius * (1 - root.rightJoin)
         }
 
     }
 
-    // ==================== Cava 律动条层(SDF 之外)====================
-    // popup 关闭时从 bar 中心向下倒挂,每根 Rectangle 走 QML Gradient:
-    //   top(贴 bar)= primary 透明 → bottom = primary 不透明
-    // 没声音(所有 value < 阈值)时整层 opacity 0 → 完全隐身
-    // 离开 SDF 体系所以 bars 数 / 宽 / 长全无 16 个 rect 上限制约
-    Loader {
-        id: cavaVizLoader
-        // 只在没"中央 popup"(标 transparent 的,目前是 dashboard)时显示
-        // 右侧 wifi/bluetooth/volume/battery/tray/power 是窄 popup,不覆盖中央律动条,无需隐藏
-        active: !(PopupManager.entry && PopupManager.entry.transparent === true)
-        sourceComponent: cavaVizComp
-        anchors.fill: parent
+    BarSpectrum {
+        width: Math.min(600 * Theme.uiScale, barShape.width - 2 * root.barRadius)
+        height: Math.ceil(46 * Theme.uiScale)
+        x: (root.width - width) / 2
+        y: root.barTopMargin + root.barHeight - 2
+        visible: Cava.showBarSpectrum && !(blobGroup.popupTransparent && root.popupRawAmount > 0)
+        samples: visible ? Cava.values : []
+        fill: blobGroup.color
     }
 
-    Component {
-        id: cavaVizComp
-        Item {
-            id: cavaViz
-            anchors.fill: parent
-
-            Component.onCompleted: Cava.needBarViz = true
-            Component.onDestruction: Cava.needBarViz = false
-
-            // 任一 bar 值超阈值 → 有音乐;全为 0 → 没声音整层淡出
-            readonly property bool hasAudio: {
-                for (let i = 0; i < Cava.bars; i++) {
-                    if ((Cava.values[i] ?? 0) > 0.04) return true
-                }
-                return false
-            }
-            opacity: cavaViz.hasAudio ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutQuad } }
-
-            // 几何:整体宽 = dashboard popup 宽度,bars 均分填满
-            // 跟 popup 同宽同居中位置(popup 也居中 root.width/2),关 popup → cava 占同样的位置感
-            readonly property real totalW: PopupManager.registry.dashboard.width
-            readonly property real spacing: 6
-            readonly property real barW: (cavaViz.totalW - (Cava.bars - 1) * cavaViz.spacing) / Cava.bars
-            readonly property real maxHang: 96
-            readonly property real startX: (root.width - cavaViz.totalW) / 2
-
-            // primary 色对象(从 Theme 拿字符串 → color),抽出 r/g/b 给透明顶部用
-            readonly property color primaryColor: Theme.colors.primary
-
-            Repeater {
-                model: Cava.bars
-                delegate: Rectangle {
-                    id: cavaBar
-                    required property int index
-                    readonly property real value: Cava.values[cavaBar.index] ?? 0
-
-                    x: cavaViz.startX + cavaBar.index * (cavaViz.barW + cavaViz.spacing)
-                    y: root.barTopMargin + root.barHeight
-                    width: cavaViz.barW
-                    height: cavaBar.value * cavaViz.maxHang
-                    // 顶部贴 bar(直角),底部圆胶囊头
-                    topLeftRadius: 0
-                    topRightRadius: 0
-                    bottomLeftRadius: cavaViz.barW / 2
-                    bottomRightRadius: cavaViz.barW / 2
-
-                    gradient: Gradient {
-                        // 根部纯黑 = bar 同色,无缝伸出;立刻开始过渡到 primary;尾部 primary 渐变透明
-                        // 0.0  黑色不透明 → 0.5  primary 饱满 → 1.0  primary 完全透明(尖端化入空气)
-                        GradientStop { position: 0;   color: "#000000" }
-                        GradientStop { position: 0.5; color: cavaViz.primaryColor }
-                        GradientStop {
-                            position: 1
-                            color: Qt.rgba(cavaViz.primaryColor.r,
-                                           cavaViz.primaryColor.g,
-                                           cavaViz.primaryColor.b, 0)
-                        }
-                    }
-
-                    // 80ms OutQuad 让 cava 60Hz 输出再丝滑一层
-                    Behavior on height {
-                        NumberAnimation { duration: 80; easing.type: Easing.OutQuad }
-                    }
-                }
-            }
-        }
-    }
-
-    // ==================== Scrim(popup 外点击关闭)====================
-    // 放在 popup 内容之前,这样 popup 内容 click 优先
-    // openInProgress 期间吞掉点击不关 —— 防止 hover 触发的 popup 还在展开就被外点闪关
-    // 在 popup 不在的别屏也铺 scrim —— 点别屏空白同样关掉 popup(配合上面 mask=null)
+    // ==================== Outside-click scrim ====================
+    // Declare before the popup content so controls receive clicks first.
+    // Swallow clicks during opening so a hover-triggered popup can finish its transition.
+    // Cover other outputs too. Clicking their scrims dismisses the popup.
     MouseArea {
         anchors.fill: parent
         visible: PopupManager.isOpen
@@ -241,11 +279,14 @@ PanelWindow {
         id: barContent
         x: root.barSideMargin
         y: root.barTopMargin
-        width: root.width - 2 * root.barSideMargin
-        height: root.barHeight
+        transformOrigin: Item.TopLeft
+        scale: Theme.uiScale
+        width: (root.width - 2 * root.barSideMargin) / scale
+        height: root.barHeight / scale
 
         ArchLogo {
             id: archLogo
+            triggerScreen: root.modelData
             anchors {
                 left: parent.left
                 leftMargin: 18
@@ -267,8 +308,8 @@ PanelWindow {
             anchors.centerIn: parent
             readonly property real leftEdge: workspaceStrip.x + workspaceStrip.width
             readonly property real rightEdge: parent.width - rightCluster.x
-            width: Math.min(implicitWidth,
-                            parent.width - 2 * Math.max(titleText.leftEdge, titleText.rightEdge) - 32)
+            readonly property real availableWidth: Math.max(0, parent.width - 2 * Math.max(leftEdge, rightEdge) - 32)
+            width: Math.min(implicitWidth, availableWidth)
         }
 
         Row {
@@ -289,18 +330,30 @@ PanelWindow {
             PowerButton { anchors.verticalCenter: parent.verticalCenter; triggerScreen: root.modelData }
         }
 
-        // ============ Dashboard hover trigger ============
-        // bar 正中固定宽窄条 hover 触发,跟 FocusedWindowTitle 中心对齐(都是 horizontalCenter)
-        // 宽度限到 320 防止只是想 hover 看标题的鼠标在大半个 bar 范围内被误触
-        Item {
+        // Click the center trigger to toggle or hover for 80 ms to open.
+        MouseArea {
             id: dashTriggerArea
-            width: 320
+            width: Math.min(320, titleText.text.length ? titleText.width : titleText.availableWidth)
             anchors {
                 top: parent.top
                 bottom: parent.bottom
                 horizontalCenter: parent.horizontalCenter
             }
-            HoverHandler { id: dashTriggerHover }
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onEntered: {
+                if (!pressed && PopupManager.currentPopup !== "dashboard")
+                    dashOpenTimer.restart()
+            }
+            onExited: dashOpenTimer.stop()
+            onPressed: dashOpenTimer.stop()
+            onClicked: PopupManager.toggle("dashboard", root.modelData, root.width / 2)
+
+            Timer {
+                id: dashOpenTimer
+                interval: 80
+                onTriggered: PopupManager.open("dashboard", root.modelData, root.width / 2)
+            }
         }
     }
 
@@ -314,13 +367,17 @@ PanelWindow {
         height: root.popupHeight
         clip: true
 
+        // Keep unhandled presses inside the panel from reaching the outside-click area.
+        MouseArea { anchors.fill: parent }
 
         component PopupItem: Loader {
             id: popupItem
             required property string name
             readonly property bool shouldBeActive: PopupManager.currentPopup === popupItem.name
-            anchors.fill: parent
-            anchors.margins: 10
+            anchors.centerIn: parent
+            width: Math.max(0, parent.width / root.popupUiScale - 20)
+            height: Math.max(0, parent.height / root.popupUiScale - 20)
+            scale: root.popupUiScale
             opacity: 0
             active: false
 
@@ -362,56 +419,69 @@ PanelWindow {
         PopupItem { name: "bluetooth"; sourceComponent: bluetoothComp }
         PopupItem { name: "volume";    sourceComponent: volumeComp    }
         PopupItem { name: "battery";   sourceComponent: batteryComp   }
-        PopupItem { name: "tray";      sourceComponent: trayComp      }
-        PopupItem { name: "dashboard"; sourceComponent: dashboardComp }
-    }
-
-    // ==================== Popup 内容组件 ====================
-    // 临时全部 inline,后续可拆文件
-
-    // 共享 Process,给 power menu 执行命令用
-    Process { id: actionProcInternal }
-
-    // ==================== Dashboard hover-open ====================
-    // 鼠标进 bar 中间 → 80ms 短延迟 → 开 dashboard。延迟防止鼠标快速划过秒触发,但不要长到感觉"慢半拍"
-    // 不再自动关:popup 像其他 popup 一样靠 scrim click / 切到别的 popup 来关
-    Connections {
-        target: dashTriggerHover
-        function onHoveredChanged() {
-            if (dashTriggerHover.hovered) {
-                if (PopupManager.currentPopup !== "dashboard") {
-                    dashOpenTimer.restart()
-                }
-            } else {
-                dashOpenTimer.stop()
-            }
+        PopupItem { id: trayLoader; name: "tray";      sourceComponent: trayComp      }
+        Loader {
+            // Lay out at the expanded size and scale the result to avoid reflowing text on every frame.
+            anchors.centerIn: parent
+            width: PopupManager.registry.dashboard.width - 20
+            height: PopupManager.registry.dashboard.heightFn(root.modelData) - 20
+            scale: Math.min(root.popupWidth / (width + 20), root.popupHeight / (height + 20))
+            active: root.popupOnThisScreen && blobGroup.popupTransparent
+                    && (PopupManager.isOpen || root.popupRawAmount > 0)
+            opacity: root.popupRawAmount
+            sourceComponent: dashboardComp
         }
     }
 
-    Timer {
-        id: dashOpenTimer
-        interval: 80
-        repeat: false
-        onTriggered: {
-            // anchorX = 屏正中。barContent 也是 horizontalCenter 居中,所以 FocusedWindowTitle / trigger
-            // / popup 三者中线对齐,popup 看起来正卡在窗口标题正下方
-            PopupManager.open("dashboard", root.modelData, root.width / 2)
+    ChatMenu {
+        id: chatMenu
+        outputName: root.modelData.name
+        activeMenu: Chat.opened && Chat.outputName === outputName
+        visible: root.chatAmount > 0
+        x: Chat.anchorX + (root.chatOrigin.x - Chat.anchorX) * root.chatAmount
+        y: root.barTopMargin + root.barHeight
+           + (root.chatOrigin.y - root.barTopMargin - root.barHeight) * root.chatAmount
+        width: fullWidth * root.chatAmount
+        height: fullHeight * root.chatAmount
+        fullWidth: root.chatFullWidth
+        fullHeight: root.chatFullHeight
+        uiScale: Theme.uiScale
+        radius: root.barRadius * root.chatAmount
+        topLeftRadius: radius * (1 - root.leftJoin)
+        onMoveRequested: (x, y) => {
+            const pos = root.boundedChatPosition(x, y)
+            root.chatGeometry = Qt.rect(pos.x, pos.y, fullWidth, fullHeight)
+        }
+        onResizeRequested: (start, edges, dx, dy) => root.resizeChat(start, edges, dx, dy)
+    }
+
+    // ==================== Popup components ====================
+    // The components are inline and can be split into separate files later.
+
+    // Shared command process for the power menu
+    Process {
+        id: actionProcInternal
+        onExited: code => {
+            // The notify service returns after niri has securely covered every output.
+            if (code === 0 && root.popupOnThisScreen && PopupManager.currentPopup === "power")
+                PopupManager.close()
         }
     }
 
-    // =================== Power(2×2 图标网格)===================
+    // ==================== Power (2 by 2 icon grid) ====================
     Component {
         id: powerComp
         Grid {
             columns: 2
             spacing: 12
-            // 每个按钮一种 Material 颜色,图标颜色用对应的 on_*_container token
+            enabled: !actionProcInternal.running
+            // Each button pairs a Material container color with its matching on_*_container icon.
             Repeater {
                 model: [
-                    { iconName: "lock", bgColor: "secondary_container", fgColor: "on_secondary_container", cmd: ["loginctl", "lock-session"] },
-                    { iconName: "logout", bgColor: "tertiary_container", fgColor: "on_tertiary_container", cmd: ["niri", "msg", "action", "quit"] },
-                    { iconName: "restart_alt", bgColor: "primary_container", fgColor: "on_primary_container", cmd: ["systemctl", "reboot"] },
-                    { iconName: "power_settings_new", bgColor: "error_container", fgColor: "on_error_container", cmd: ["systemctl", "poweroff"] }
+                    { icon: "lock", tone: "secondary", command: ["systemctl", "--user", "start", "mine-lock.service"] },
+                    { icon: "logout", tone: "tertiary" },
+                    { icon: "restart_alt", tone: "primary", command: ["systemctl", "reboot"] },
+                    { icon: "power_settings_new", tone: "error", command: ["systemctl", "poweroff"] }
                 ]
                 Rectangle {
                     id: powerItem
@@ -420,18 +490,18 @@ PanelWindow {
                     height: width
                     radius: 20
                     color: powerHover.containsMouse
-                        ? Qt.tint(Theme.colors[powerItem.modelData.bgColor], "#20ffffff")
-                        : Theme.colors[powerItem.modelData.bgColor]
+                        ? Qt.tint(Theme.colors[powerItem.modelData.tone + "_container"], "#20ffffff")
+                        : Theme.colors[powerItem.modelData.tone + "_container"]
                     Behavior on color { ColorAnimation { duration: 150 } }
                     scale: powerHover.pressed ? 0.95 : 1
                     Behavior on scale { NumberAnimation { duration: 100 } }
 
                     Text {
                         anchors.centerIn: parent
-                        text: powerItem.modelData.iconName
+                        text: powerItem.modelData.icon
                         font.family: "Material Symbols Rounded"
                         font.pixelSize: 42
-                        color: Theme.colors[powerItem.modelData.fgColor]
+                        color: Theme.colors["on_" + powerItem.modelData.tone + "_container"]
                     }
 
                     MouseArea {
@@ -440,9 +510,12 @@ PanelWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            actionProcInternal.command = powerItem.modelData.cmd
-                            actionProcInternal.running = true
-                            PopupManager.close()
+                            if (powerItem.modelData.icon === "logout") root.logoutRequested()
+                            else {
+                                actionProcInternal.command = powerItem.modelData.command
+                                actionProcInternal.running = true
+                                if (powerItem.modelData.icon !== "lock") PopupManager.close()
+                            }
                         }
                     }
                 }
@@ -450,13 +523,13 @@ PanelWindow {
         }
     }
 
-    // =================== Wifi(开关 + 当前连接 + 网络列表)===================
+    // ==================== Wi-Fi (switch, connection and networks) ====================
     Component {
         id: wifiComp
         Item {
             Component.onCompleted: SystemStatus.refreshWifi()
 
-            // 顶部:飞行模式 + wifi 开关 + refresh(三档,refresh 是正方形小按钮)
+            // The top row contains airplane mode, Wi-Fi and a square refresh button.
             Row {
                 id: switchRow
                 anchors {
@@ -467,9 +540,9 @@ PanelWindow {
                 height: 56
                 spacing: 12
 
-                // 飞行模式
+                // Airplane mode
                 Rectangle {
-                    // 总宽减 refresh(56)再扣 2 个 spacing,剩余对半分
+                    // Split the remaining width after subtracting the 56 px refresh button and two gaps.
                     width: (switchRow.width - switchRow.spacing * 2 - 56) / 2
                     height: parent.height
                     radius: 16
@@ -496,7 +569,7 @@ PanelWindow {
                     }
                 }
 
-                // Wifi 开关
+                // Wi-Fi switch
                 Rectangle {
                     width: (switchRow.width - switchRow.spacing * 2 - 56) / 2
                     height: parent.height
@@ -524,7 +597,7 @@ PanelWindow {
                     }
                 }
 
-                // Refresh 按钮(正方形 56×56 图标卡)
+                // Square 56 px refresh button
                 Rectangle {
                     width: 56
                     height: parent.height
@@ -540,7 +613,7 @@ PanelWindow {
                         font.pixelSize: 24
                         color: Theme.colors.on_surface
 
-                        // 点击时图标转一圈
+                        // Rotate the icon once per click.
                         property real rot: 0
                         rotation: rot
                         Behavior on rot {
@@ -554,14 +627,14 @@ PanelWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            SystemStatus.refreshWifi()
+                            SystemStatus.scanWifi()
                             wifiRefreshIcon.rot += 360
                         }
                     }
                 }
             }
 
-            // 当前连接状态(connected: primary_container 着色;disconnected: surface_container)
+            // Use primary_container for connected and surface_container for disconnected.
             Rectangle {
                 id: wifiHeader
                 anchors {
@@ -611,8 +684,10 @@ PanelWindow {
                         width: parent.width
                     }
                     Text {
-                        visible: SystemStatus.wifiConnected
-                        text: `${SystemStatus.wifiSignal}%`
+                        visible: SystemStatus.wifiConnected || SystemStatus.wifiMessage.length > 0
+                        width: parent.width
+                        elide: Text.ElideRight
+                        text: SystemStatus.wifiMessage || `${SystemStatus.wifiSignal}%`
                         color: Theme.colors.on_primary_container
                         opacity: 0.7
                         font.family: "Maple Mono NF CN"
@@ -621,14 +696,30 @@ PanelWindow {
                 }
             }
 
-            // 网络列表
+            // Network list
+            PanelAction {
+                id: wifiSettings
+                symbol: "settings"
+                trailingSymbol: "open_in_new"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 34
+                text: "Network settings"
+                onClicked: {
+                    Quickshell.execDetached(["kcmshell6", "kcm_networkmanagement"])
+                    PopupManager.close()
+                }
+            }
+
             ListView {
                 anchors {
                     top: wifiHeader.bottom
                     topMargin: 12
                     left: parent.left
                     right: parent.right
-                    bottom: parent.bottom
+                    bottom: wifiSettings.top
+                    bottomMargin: 6
                 }
                 model: SystemStatus.wifiNetworks
                 clip: true
@@ -645,7 +736,7 @@ PanelWindow {
                         : (wifiRow.modelData.inUse ? Theme.colors.surface_container : "transparent")
                     Behavior on color { ColorAnimation { duration: 150 } }
 
-                    // 信号强度 icon —— 按 SSID 是否当前连接 / 是否加密 / 信号强度选不同 Material Symbols
+                    // Choose a Material Symbol by connection status, security and signal strength.
                     Text {
                         id: signalIcon
                         anchors {
@@ -690,7 +781,7 @@ PanelWindow {
                         elide: Text.ElideRight
                     }
 
-                    // 已连接的网络打勾
+                    // Mark the connected network with a check.
                     Text {
                         id: checkIcon
                         anchors {
@@ -712,8 +803,8 @@ PanelWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             if (!wifiRow.modelData.inUse) {
-                                SystemStatus.connectWifi(wifiRow.modelData.ssid)
-                                // 不关闭 popup,让用户看到刷新后的连接状态
+                                SystemStatus.connectWifi(wifiRow.modelData.ssid, wifiRow.modelData.secured)
+                                // Leave the popup open so the updated connection is visible.
                             }
                         }
                     }
@@ -722,13 +813,13 @@ PanelWindow {
         }
     }
 
-    // =================== Bluetooth(开关 + 状态 + 设备列表)===================
+    // ==================== Bluetooth (switch, status and devices) ====================
     Component {
         id: bluetoothComp
         Item {
             Component.onCompleted: SystemStatus.refreshBluetooth()
 
-            // 顶部:bluetooth 开关 + refresh(没飞行模式,wifi popup 已经有)
+            // Bluetooth power and refresh. Airplane mode lives in the Wi-Fi popup.
             Row {
                 id: btSwitchRow
                 anchors {
@@ -802,7 +893,7 @@ PanelWindow {
                 }
             }
 
-            // 状态卡:已连接数 / off
+            // Show the connected device count or the powered-off state.
             Rectangle {
                 id: btHeader
                 anchors {
@@ -841,7 +932,8 @@ PanelWindow {
                         rightMargin: 16
                         verticalCenter: parent.verticalCenter
                     }
-                    text: !SystemStatus.bluetoothPowered ? "Bluetooth off"
+                    text: SystemStatus.bluetoothMessage ? SystemStatus.bluetoothMessage
+                          : !SystemStatus.bluetoothPowered ? "Bluetooth off"
                           : SystemStatus.bluetoothConnected
                                 ? (SystemStatus.bluetoothDeviceCount === 1
                                     ? "1 device connected"
@@ -857,20 +949,37 @@ PanelWindow {
                 }
             }
 
-            // 设备列表
+            // Device list
+            PanelAction {
+                id: pairDevice
+                symbol: "bluetooth_searching"
+                trailingSymbol: "open_in_new"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 34
+                text: "Pair new device…"
+                enabled: SystemStatus.bluetoothPowered
+                onClicked: {
+                    Quickshell.execDetached(["bluedevil-wizard"])
+                    PopupManager.close()
+                }
+            }
+
             ListView {
                 anchors {
                     top: btHeader.bottom
                     topMargin: 12
                     left: parent.left
                     right: parent.right
-                    bottom: parent.bottom
+                    bottom: pairDevice.top
+                    bottomMargin: 6
                 }
                 model: SystemStatus.bluetoothDevices
                 clip: true
                 spacing: 4
 
-                // 没有 paired 设备时给个提示
+                // Show a hint when there are no paired devices.
                 Text {
                     anchors.centerIn: parent
                     visible: parent.count === 0
@@ -892,7 +1001,7 @@ PanelWindow {
                         : (btRow.modelData.connected ? Theme.colors.surface_container : "transparent")
                     Behavior on color { ColorAnimation { duration: 150 } }
 
-                    // 按设备名简单猜个 Material Symbol icon
+                    // Choose a Material Symbol from the device name.
                     readonly property string deviceIcon: {
                         const n = btRow.modelData.name.toLowerCase()
                         if (/headphone|headset|buds|airpod|earbud/.test(n)) return "headphones"
@@ -968,16 +1077,16 @@ PanelWindow {
         }
     }
 
-    // =================== Volume(顶部音量条 + sink 下拉)===================
+    // ==================== Volume (slider and output selector) ====================
     Component {
         id: volumeComp
         Item {
             id: volRoot
             Component.onCompleted: SystemStatus.refreshAudio()
 
-            // 当前默认 sink
+            // Current default sink
             readonly property var defaultSink: SystemStatus.audioSinks.find(s => s.isDefault) || null
-            // 展开状态(从 PopupManager.extraHeight 派生)
+            // Derive expansion from PopupManager.extraHeight.
             readonly property bool sinksExpanded: PopupManager.extraHeight > 4
 
             function sinkIcon(sink) {
@@ -990,7 +1099,7 @@ PanelWindow {
                 return "speaker"
             }
 
-            // 顶部:音量条
+            // Top volume slider
             Rectangle {
                 id: volCard
                 anchors {
@@ -1011,13 +1120,10 @@ PanelWindow {
                     }
                     width: 28
                     horizontalAlignment: Text.AlignHCenter
-                    text: SystemStatus.volumeMuted ? "volume_off"
-                          : SystemStatus.volumePercent === 0 ? "volume_mute"
-                          : SystemStatus.volumePercent < 34 ? "volume_down"
-                          : "volume_up"
+                    text: SystemStatus.volumeIcon
                     font.family: "Material Symbols Rounded"
                     font.pixelSize: 26
-                    color: SystemStatus.volumeMuted ? Theme.colors.on_surface_variant : Theme.colors.primary
+                    color: SystemStatus.volumeSilent ? Theme.colors.on_surface_variant : Theme.colors.primary
                     MouseArea {
                         anchors.fill: parent
                         hoverEnabled: true
@@ -1047,7 +1153,7 @@ PanelWindow {
                     }
                     width: 40
                     horizontalAlignment: Text.AlignRight
-                    text: SystemStatus.volumeMuted ? "—" : `${SystemStatus.volumePercent}%`
+                    text: SystemStatus.volumeSilent ? "—" : `${SystemStatus.volumePercent}%`
                     color: Theme.colors.on_surface
                     font.family: "Maple Mono NF CN"
                     font.pixelSize: 14
@@ -1055,8 +1161,8 @@ PanelWindow {
                 }
             }
 
-            // sink 下拉按钮(显示当前 sink + chevron;点击切换 extraHeight)
-            // 用 primary_container 跟 wifi/bluetooth 当前连接卡同款"亮色"风格 —— 输出设备一定有当前选中的
+            // Show the current sink and a chevron. Toggle extraHeight when clicked.
+            // Highlight the selected output with the same primary_container used for active connections.
             Rectangle {
                 id: sinkButton
                 anchors {
@@ -1126,7 +1232,7 @@ PanelWindow {
                 }
             }
 
-            // 下拉的 sink 列表;只在 sinksExpanded 时占位渲染
+            // Render the sink list and reserve its height only while expanded.
             ListView {
                 id: sinkList
                 anchors {
@@ -1206,7 +1312,7 @@ PanelWindow {
                             if (!sinkRow.modelData.isDefault) {
                                 SystemStatus.setDefaultSink(sinkRow.modelData.name)
                             }
-                            // 选完自动收起
+                            // Collapse after selection.
                             PopupManager.extraHeight = 0
                         }
                     }
@@ -1215,13 +1321,13 @@ PanelWindow {
         }
     }
 
-    // =================== Battery(电池信息 + 屏幕亮度)===================
+    // ==================== Battery and display brightness ====================
     Component {
         id: batteryComp
         Item {
             id: batRoot
 
-            // popup 所在屏的名字(亮度按此找 backlight 后端)
+            // Use the popup's output name to select the brightness backend.
             readonly property string screenName: PopupManager.currentScreen ? PopupManager.currentScreen.name : ""
             readonly property bool hasBrightness: batRoot.screenName.length > 0
             readonly property real currentBrightness: {
@@ -1233,9 +1339,9 @@ PanelWindow {
 
             Component.onCompleted: {
                 if (!batRoot.screenName) return
-                // 有缓存(包括启动 prefetch 或上次 setBrightness 的乐观值)→ 不跑 ddcutil,popup 立刻就稳
+                // Use the prefetched or optimistically updated cache immediately to avoid a ddcutil round trip.
                 if (SystemStatus.brightnessByScreen[batRoot.screenName] !== undefined) return
-                // 没缓存:内屏快 fetch;外屏延后 fetch(兜底,通常 prefetch 已经回来了不会进这里)
+                // On a cache miss, read the internal backlight immediately or defer the slower external query.
                 if (SystemStatus.brightnessBackendFor(batRoot.screenName) === "brightnessctl") {
                     SystemStatus.fetchBrightnessFor(batRoot.screenName)
                 } else {
@@ -1255,7 +1361,7 @@ PanelWindow {
                                               && SystemStatus.batteryPercent <= 15
                                               && !SystemStatus.batteryCharging
 
-            // 顶卡:电池信息(图标 + 百分比 + 状态),用 primary_container 亮色 —— 电池总是"在用"
+            // Show battery icon, percentage and status on a primary_container card.
             Rectangle {
                 id: batCard
                 anchors {
@@ -1311,7 +1417,7 @@ PanelWindow {
                 }
             }
 
-            // 亮度卡:仅调当前屏(brightnessctl 给内屏 / ddcutil 给外屏)
+            // Adjust only this output using brightnessctl internally or ddcutil externally.
             Rectangle {
                 id: brightCard
                 anchors {
@@ -1375,18 +1481,27 @@ PanelWindow {
         }
     }
 
-    // =================== Dashboard(中央大 popup,4 tab 框架)===================
-    // 顶栏 4 tab:media / dashboard / weather / control
-    // 当前 tab 用 primary 色文字 + 下方滑动下划线指示;切换时下划线在 tab 间平滑滑过去
-    // 内容区目前只是占位(图标 + "coming soon"),后续每个 tab 单独实现
+    // ==================== Central dashboard and its four tabs ====================
+    // Tab order: media, dashboard, weather, control
+    // Mark the active tab with primary text and a sliding underline.
+    // Each tab supplies its own content component.
     Component {
         id: dashboardComp
         Item {
             id: dashRoot
 
-            // tab 状态存在 PopupManager(Singleton)上 —— Loader 销毁重建后 popup 再次打开还是上次那个 tab
-            // 默认 "dashboard"(PopupManager 里设的初始值)
+            // PopupManager preserves the selected tab when the Loader is recreated.
+            // PopupManager initially selects dashboard.
             readonly property string currentTab: PopupManager.dashboardTab
+            property bool animateTabChange: false
+            readonly property bool dashboardOpen: PopupManager.currentPopup === "dashboard"
+            onDashboardOpenChanged: {
+                if (!dashboardOpen) {
+                    animateTabChange = false
+                    underlineSlide.complete()
+                    underlineResize.complete()
+                }
+            }
 
             readonly property var tabs: [
                 { key: "media",     label: "Media",     icon: "music_note" },
@@ -1395,7 +1510,7 @@ PanelWindow {
                 { key: "control",   label: "Control",   icon: "tune" }
             ]
 
-            // ============ 顶栏 ============
+            // ============ Tab bar ============
             Item {
                 id: tabBar
                 anchors {
@@ -1405,10 +1520,10 @@ PanelWindow {
                 }
                 height: 44
 
-                // tab 容器:Row 居中,Repeater 每个 tab 一个 Item
-                // 每个 tab 不画自己的下划线 —— 共享一根 underline Rectangle 在外面,
-                // 用 Behavior 平滑 x/width 在 tab 间滑动
-                // tab 容器:整宽 N 等分,每个 tab Item 平均一份,label 在 Item 里居中
+                // Center a Row with one repeated item per tab.
+                // Use a single underline rectangle shared by all tabs.
+                // Animate its x position and width between labels.
+                // Divide the width evenly and center each label within its item.
                 Row {
                     id: tabRow
                     anchors.fill: parent
@@ -1422,7 +1537,7 @@ PanelWindow {
                             required property var modelData
                             required property int index
                             readonly property bool isActive: dashRoot.currentTab === tab.modelData.key
-                            // 暴露 label 实际宽度给 underline 用,让下划线精确卡在文字底下
+                            // Expose the label width to size the underline to the text.
                             readonly property real labelWidth: tabLabel.implicitWidth
 
                             width: tabRow.width / tabRepeater.count
@@ -1457,13 +1572,17 @@ PanelWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: PopupManager.dashboardTab = tab.modelData.key
+                                onClicked: {
+                                    if (tab.isActive) return
+                                    dashRoot.animateTabChange = true
+                                    PopupManager.dashboardTab = tab.modelData.key
+                                }
                             }
                         }
                     }
                 }
 
-                // 滑动下划线 —— 跟随当前 active tab 的 label 中心 + label 宽度
+                // Center the underline on the active label and match its width.
                 Rectangle {
                     id: underline
                     readonly property Item activeTab: {
@@ -1490,14 +1609,30 @@ PanelWindow {
                     anchors.bottomMargin: 4
                     visible: underline.activeTab !== null
 
-                    Behavior on x { NumberAnimation { duration: 280; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1] } }
-                    Behavior on width { NumberAnimation { duration: 280; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1] } }
+                    Behavior on x {
+                        enabled: dashRoot.animateTabChange
+                        NumberAnimation {
+                            id: underlineSlide
+                            duration: 280
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+                        }
+                    }
+                    Behavior on width {
+                        enabled: dashRoot.animateTabChange
+                        NumberAnimation {
+                            id: underlineResize
+                            duration: 280
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+                        }
+                    }
                 }
             }
 
-            // ============ 内容区 ============
-            // Loader 按 currentTab 切换 source;已实现的 tab → 自己的 Component / 文件,
-            // 没实现的 tab → placeholderComp("图标 + coming soon")
+            // ============ Content ============
+            // The Loader selects a component by currentTab.
+            // Use placeholderComp for tabs without an implementation.
             Loader {
                 id: contentLoader
                 anchors {
@@ -1539,7 +1674,7 @@ PanelWindow {
                 ControlTab {}
             }
 
-            // 未实现的 tab 占位
+            // Placeholder for unimplemented tabs
             Component {
                 id: placeholderComp
                 Item {
@@ -1576,75 +1711,167 @@ PanelWindow {
     }
 
     // =================== System Tray ===================
-    // 列出所有 StatusNotifierItem(clash-verge / fcitx5 等)。
-    // 左键 activate(默认动作);右键 secondaryActivate;滚轮 scroll。
+    // List StatusNotifierItems such as Clash Verge and Fcitx5.
+    // Left click activates, right click opens the application menu, and middle click invokes the secondary action.
     Component {
         id: trayComp
-        ListView {
-            anchors.fill: parent
-            clip: true
-            spacing: 4
-            model: SystemTray.items
+        Controls.StackView {
+            id: trayStack
+            readonly property real pageHeight: currentItem?.preferredPageHeight ?? 0
+            initialItem: trayItems
+            Keys.onEscapePressed: {
+                if (depth > 1) pop()
+                else PopupManager.close()
+            }
 
-            delegate: Rectangle {
-                id: trayRow
-                required property SystemTrayItem modelData
-                width: ListView.view.width
-                height: 40
-                radius: 10
-                color: trayHover.containsMouse ? Theme.colors.surface_container_high : "transparent"
-                Behavior on color { ColorAnimation { duration: 150 } }
+            function openMenu(handle: QsMenuHandle, title: string): void {
+                push(menuPage, { handle: handle, title: title })
+                forceActiveFocus()
+            }
 
-                Row {
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        verticalCenter: parent.verticalCenter
-                        leftMargin: 12
-                        rightMargin: 12
+            Component {
+                id: menuPage
+                Item {
+                    id: page
+                    required property QsMenuHandle handle
+                    required property string title
+                    readonly property real preferredPageHeight: back.height + 4
+                        + opener.children.values.reduce((h, entry) => h + (entry.isSeparator ? 9 : 36), 0)
+                    onHandleChanged: {
+                        if (!handle && Controls.StackView.status === Controls.StackView.Active)
+                            trayStack.pop(null)
                     }
-                    spacing: 12
-
-                    Image {
-                        anchors.verticalCenter: parent.verticalCenter
-                        source: trayRow.modelData.icon
-                        sourceSize.width: 22
-                        sourceSize.height: 22
-                        width: 22
-                        height: 22
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
+                    QsMenuOpener { id: opener; menu: page.handle }
+                    PanelAction {
+                        id: back
+                        width: parent.width
+                        symbol: "arrow_back"
+                        text: page.title
+                        Accessible.name: "Back — " + page.title
+                        onClicked: trayStack.pop()
                     }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: trayRow.modelData.title || trayRow.modelData.id
-                        color: Theme.colors.on_surface
-                        font.family: "Maple Mono NF CN"
-                        font.pixelSize: 13
-                        font.styleName: "Bold"
-                        elide: Text.ElideRight
-                        width: trayRow.width - 24 - 22 - 12
+                    ListView {
+                        anchors { top: back.bottom; topMargin: 4; left: parent.left; right: parent.right; bottom: parent.bottom }
+                        clip: true
+                        model: opener.children
+                        delegate: Item {
+                            id: menuRow
+                            required property QsMenuEntry modelData
+                            width: ListView.view.width
+                            height: modelData.isSeparator ? 9 : 36
+                            Rectangle {
+                                visible: menuRow.modelData.isSeparator
+                                anchors.centerIn: parent
+                                width: parent.width - 24
+                                height: 1
+                                color: Theme.colors.outline_variant
+                            }
+                            PanelAction {
+                                anchors.fill: parent
+                                visible: !menuRow.modelData.isSeparator
+                                enabled: menuRow.modelData.enabled
+                                filled: false
+                                text: menuRow.modelData.text
+                                imageUrl: menuRow.modelData.icon
+                                symbol: {
+                                    const entry = menuRow.modelData
+                                    if (entry.buttonType === QsMenuButtonType.RadioButton)
+                                        return entry.checkState === Qt.Checked ? "radio_button_checked" : "radio_button_unchecked"
+                                    if (entry.buttonType === QsMenuButtonType.CheckBox)
+                                        return entry.checkState === Qt.Checked ? "check_box"
+                                             : entry.checkState === Qt.PartiallyChecked ? "indeterminate_check_box"
+                                             : "check_box_outline_blank"
+                                    return ""
+                                }
+                                trailingSymbol: menuRow.modelData.hasChildren ? "chevron_right" : ""
+                                onClicked: {
+                                    if (menuRow.modelData.hasChildren)
+                                        trayStack.openMenu(menuRow.modelData, menuRow.modelData.text)
+                                    else {
+                                        menuRow.modelData.triggered()
+                                        PopupManager.close()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+            }
 
-                MouseArea {
-                    id: trayHover
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: (mouse) => {
-                        if (mouse.button === Qt.RightButton) {
-                            trayRow.modelData.secondaryActivate()
-                        } else {
-                            trayRow.modelData.activate()
+            Component {
+                id: trayItems
+                ListView {
+                    readonly property real preferredPageHeight: count * 40 + Math.max(0, count - 1) * spacing
+                    clip: true
+                    spacing: 4
+                    model: SystemTray.items
+
+                    delegate: Rectangle {
+                        id: trayRow
+                        required property SystemTrayItem modelData
+                        width: ListView.view.width
+                        height: 40
+                        radius: 10
+                        color: trayHover.containsMouse ? Theme.colors.surface_container_high : "transparent"
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Row {
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                verticalCenter: parent.verticalCenter
+                                leftMargin: 12
+                                rightMargin: 12
+                            }
+                            spacing: 12
+
+                            Image {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: trayRow.modelData.icon
+                                sourceSize.width: 22
+                                sourceSize.height: 22
+                                width: 22
+                                height: 22
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: trayRow.modelData.title || trayRow.modelData.id
+                                color: Theme.colors.on_surface
+                                font.family: "Maple Mono NF CN"
+                                font.pixelSize: 13
+                                font.styleName: "Bold"
+                                elide: Text.ElideRight
+                                width: trayRow.width - 24 - 22 - 12
+                            }
                         }
-                        PopupManager.close()
-                    }
-                    onWheel: (event) => {
-                        trayRow.modelData.scroll(event.angleDelta.y, false)
-                        event.accepted = true
+
+                        MouseArea {
+                            id: trayHover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                            onClicked: (mouse) => {
+                                const item = trayRow.modelData
+                                if (item.hasMenu && (mouse.button === Qt.RightButton || (mouse.button === Qt.LeftButton && item.onlyMenu))) {
+                                    trayStack.openMenu(item.menu, item.title || item.id)
+                                    return
+                                }
+                                if (mouse.button === Qt.MiddleButton || mouse.button === Qt.RightButton) {
+                                    trayRow.modelData.secondaryActivate()
+                                } else {
+                                    trayRow.modelData.activate()
+                                }
+                                PopupManager.close()
+                            }
+                            onWheel: (event) => {
+                                trayRow.modelData.scroll(event.angleDelta.y, false)
+                                event.accepted = true
+                            }
+                        }
                     }
                 }
             }

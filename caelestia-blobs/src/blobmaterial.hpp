@@ -38,7 +38,7 @@ public:
     float m_invertedOuter[4] = {};
     float m_invertedInner[4] = {};
     BlobRectData m_rects[16] = {};
-    // 顶 → 底渐变(同 group 上的设置)
+    // Vertical gradient configured on the group.
     QColor m_colorBottom{ 0x44, 0x88, 0xff };
     float m_gradientTop = 0;
     float m_gradientBottom = 0;

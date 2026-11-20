@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 
-// BluetoothIndicator —— 蓝牙图标。点击展开 BluetoothDropdown(内含 power toggle)
+// Open the Bluetooth dropdown, including its power toggle.
 
 import QtQuick
 import qs.services

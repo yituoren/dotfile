@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 
-// WifiIndicator —— 信号强度图标。点击展开 WifiDropdown
+// Signal strength icon. Click to open the Wi-Fi dropdown.
 
 import QtQuick
 import qs.services

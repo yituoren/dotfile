@@ -1,0 +1,13 @@
+[Unit]
+Description=Expose the dotfiles login theme to the SDDM greeter
+Before=sddm.service
+RequiresMountsFor=/home/yituoren/.dotfiles/sddm/mine
+
+[Mount]
+What=/home/yituoren/.dotfiles/sddm/mine
+Where=/run/minesddm
+Type=none
+Options=bind,ro,nosuid,nodev,noexec
+
+[Install]
+WantedBy=sddm.service

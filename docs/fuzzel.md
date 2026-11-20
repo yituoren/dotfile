@@ -3,17 +3,18 @@
 ## Linking the dotfile
 
 ```bash
-ln -sf ~/.dotfiles/fuzzel/fuzzel.ini ~/.config/fuzzel/fuzzel.ini
+mkdir -p ~/.config/fuzzel
+ln -s ~/.dotfiles/fuzzel/fuzzel.ini ~/.config/fuzzel/fuzzel.ini
 ```
 
-`fuzzel_theme.ini` 是 matugen 渲染的产物,不进仓库,留在 `~/.config/fuzzel/`。
+matugen renders `fuzzel_theme.ini` directly into `~/.config/fuzzel/`. The generated file stays outside the repository.
 
 ## Configuration
 
 ```ini
-include="~/.config/fuzzel/fuzzel_theme.ini"   # matugen 颜色
+include="~/.config/fuzzel/fuzzel_theme.ini"   # Generated matugen palette
 font=Maple Mono NF CN:weight=medium
-terminal=wezterm start --                     # 起 Terminal=true 的 .desktop
+terminal=wezterm start --                     # Desktop entries with Terminal=true
 prompt=">>  "
 layer=overlay
 
@@ -25,50 +26,53 @@ width=1
 exit-immediately-if-empty=yes
 ```
 
-### `terminal=` 字段
+### Terminal Prefix
 
-整段当成**前缀**,fuzzel 把 .desktop 的 Exec 命令直接拼在后面,不自动加 `-e`。
+Fuzzel appends the desktop entry's `Exec` command to this prefix. Include any terminal-specific execution flag in the prefix.
 
-| 值 | 实际执行(以 `yazi` 为例) |
+| Prefix | Command for `yazi` |
 |---|---|
-| `xterm -e`(默认) | `xterm -e yazi` |
+| `xterm -e` (default) | `xterm -e yazi` |
 | `kitty -1` | `kitty -1 yazi` |
 | `wezterm start --` | `wezterm start -- yazi` |
 | `wezterm -e` | `wezterm -e yazi` |
 
-### `font=` 字段
+### Font
 
-格式 `家族:weight=...:size=...`。查可用家族:
+Use `family:weight=...:size=...`. List available families with:
 
 ```bash
 fc-list | grep -i maple
 ```
 
-### `layer=` 字段
+### Layer
 
-`background < bottom < top < overlay`,fuzzel 默认 `overlay` 保证总能弹出。
+The stacking order is `background < bottom < top < overlay`. The default overlay keeps fuzzel visible.
 
 ## niri Integration
 
-`~/.dotfiles/niri/rules.kdl` 给 fuzzel 加背景模糊:
+Configure the background blur in `~/.dotfiles/niri/rules.kdl`.
 
 ```kdl
 layer-rule {
     match namespace="^launcher$"
-    background-effect { blur true }
+    geometry-corner-radius 17
+    background-effect {
+        blur true
+    }
 }
 ```
 
-fuzzel 的 layer-shell namespace 写死叫 `launcher`。验证 fuzzel 实际 namespace:
+Fuzzel uses the fixed layer-shell namespace `launcher`. Verify the published namespace with:
 
 ```bash
-# 弹起 fuzzel 后另一个终端跑
+# With fuzzel open, run this in another terminal.
 niri msg layers
 ```
 
 ## Launch Modes
 
-| 入口 | 模式 |
+| Binding | Mode |
 |---|---|
-| niri `Mod+Space` → `spawn "fuzzel"` | 普通(扫 .desktop) |
-| niri `Mod+V` → `cliphist list \| fuzzel --dmenu \| ...` | dmenu(从 stdin 读条目) |
+| niri `Mod+Space` → `spawn "fuzzel"` | Application launcher reading desktop entries |
+| niri `Mod+V` → `cliphist list \| fuzzel --dmenu \| ...` | dmenu reading entries from stdin |

@@ -1,0 +1,9 @@
+[Unit]
+Description=Wait for the session lock before sleep
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python %h/.config/quickshell/mine-lock/sleep-guard.py
+Restart=always
+RestartSec=1s

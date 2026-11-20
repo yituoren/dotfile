@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
-// PowerButton —— 点击展开 PowerDropdown
-// hover 变 error 色作为视觉警示
+// Open the power dropdown.
+// Show the error color on hover.
 
 import QtQuick
 import qs.services
@@ -13,8 +13,8 @@ Text {
     text: "power_settings_new"
     font.family: "Material Symbols Rounded"
     font.pixelSize: 20
-    // 固定 bounding box 22px,glyph 居中。统一所有 right-cluster 图标的宽度,
-    // 让 Row.spacing 给出的视觉间距尽量均匀(不同 Material Symbol glyph 自然宽度不同)
+    // Center each right-hand icon in a fixed 22 px box so Row.spacing stays consistent
+    // across Material Symbols with different glyph widths.
     width: 22
     horizontalAlignment: Text.AlignHCenter
     color: mouse.containsMouse ? Theme.colors.error : Theme.colors.on_surface

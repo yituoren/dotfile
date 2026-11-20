@@ -1,52 +1,50 @@
-// 开机启动 / 光标 / 杂项
+// Startup, cursor and miscellaneous settings
 
-// ---- 开机启动 ----------------------------------------------------------
-// 输入法
+// ---- Startup ----
+// Input method
 spawn-at-startup "fcitx5" "-d" "--replace"
 
-// 壁纸守护进程(awww 是 swww 的延续,CLI 同名 awww img / awww restore)
+// Wallpaper daemon. awww continues swww with awww img and awww restore.
 spawn-at-startup "awww-daemon"
-// 开机自动恢复上次壁纸(awww-daemon 起来后再调,稍等一下)
-spawn-sh-at-startup "sleep 0.5 && awww restore"
+// Wait for an output and recover the saved matugen wallpaper path if the awww cache is empty after an upgrade.
+spawn-sh-at-startup "bash ~/.dotfiles/scripts/restore-wallpaper.sh"
 
-// 密钥环 / 空闲管理(hypridle 与合成器无关,可继续用)
 spawn-at-startup "gnome-keyring-daemon" "--start" "--components=secrets"
-spawn-at-startup "hypridle"
 
-// 音频效果
-spawn-at-startup "easyeffects" "--hide-window" "--service-mode"
+// The session guard starts the idle monitors and handles logind lock requests.
+spawn-at-startup "systemctl" "--user" "start" "mine-sleep-lock.service"
 
-// 剪贴板历史(cliphist + wl-paste 监听,与合成器无关)
+// Start EasyEffects with the session when installed.
+spawn-sh-at-startup "if command -v easyeffects >/dev/null 2>&1; then exec easyeffects --service-mode; fi"
+
+// Clipboard history using cliphist and a compositor-independent wl-paste watcher.
 spawn-sh-at-startup "wl-paste --type text  --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
 
-// 天气定位用的 geoclue agent(脚本仍在 hypr/ 下,路径有效)
-spawn-sh-at-startup "~/.config/hypr/hyprland/scripts/start_geoclue_agent.sh"
+// GeoClue location authorization for the weather panel.
+spawn-at-startup "/usr/lib/geoclue-2.0/demos/agent"
 
-// 自建 Quickshell shell —— mine config 在 ~/.config/quickshell/mine/(指向 ~/.dotfiles/quickshell/mine)
-// QML_IMPORT_PATH 由 niri/environment.kdl 提供,让 qs 能找到 ~/.local/share/qt6/qml/Caelestia/Blobs
-// (那个是自编的 SDF blob plugin,部署见 docs/quickshell.md)
+// Start the custom shell from ~/.config/quickshell/mine, linked to ~/.dotfiles/quickshell/mine.
+// niri/environment.kdl supplies QML_IMPORT_PATH so qs can find ~/.local/share/qt6/qml/Caelestia/Blobs.
+// See docs/quickshell.md for building and installing the SDF plugin.
 spawn-at-startup "qs" "-p" "/home/yituoren/.config/quickshell/mine" "-d"
 
-// TODO: 临时的 polkit 认证代理(原来由 ii 的 shell 提供,shell 建好后可删)
-// spawn-at-startup "/usr/lib/polkit-kde-authentication-agent-1"
-
-// ---- 光标  (对应 execs.conf 里的 hyprctl setcursor) -------------------
+// ---- Cursor ----
 cursor {
     xcursor-theme "Bibata-Modern-Classic"
     xcursor-size 24
 }
 
-// ---- 杂项 --------------------------------------------------------------
-prefer-no-csd                       // 让应用不画自己的标题栏(niri 本身无标题栏)
+// ---- Miscellaneous ----
+prefer-no-csd                       // Request server-side decorations. niri does not draw title bars.
 screenshot-path "~/Pictures/Screenshots/Screenshot-%Y%m%d-%H%M%S.png"
 
 hotkey-overlay {
-    skip-at-startup                  // 不在开机时弹快捷键面板
+    skip-at-startup                  // Skip the hotkey overlay at startup.
 }
 
 gestures {
     hot-corners {
-        off                          // 关掉鼠标移到角落触发概览(避免误触)
+        off                          // Disable the overview hot corner to avoid accidental activation.
     }
 }

@@ -1,14 +1,14 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-// Tasks —— Taskwarrior 薄壳
+// Taskwarrior interface
 //
-// `task export` 拿全量 JSON,JS 端解析 + 过滤 + 按日期分组。
-// 5s 周期 refresh + 每次写操作后立刻 refresh。
-// 写操作:add / done / undo / remove,通过 spawn `task` CLI 触发。
+// Read the complete task export as JSON, then filter and group by date in JavaScript.
+// Refresh every five seconds and immediately after writes.
+// Use the task CLI to add, complete, undo or remove a task.
 //
-// 日期处理:taskwarrior 的 due 字段格式是 `YYYYMMDDTHHMMSSZ`(UTC),
-// JS 端转 Date 对象再用 sameDay 比对(local TZ)。
+// Taskwarrior due dates use YYYYMMDDTHHMMSSZ in UTC.
+// Convert them to JavaScript Dates and compare calendar days in the local time zone.
 
 import QtQuick
 import Quickshell
@@ -17,8 +17,8 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property var pending: []   // 全部 pending(未完成)task 快照
-    property var completed: [] // 最近完成的(可选,用于显示已完成数)
+    property var pending: []   // Snapshot of all pending tasks
+    property var completed: [] // Recently completed tasks for the optional completion count
     readonly property bool ready: root.pending !== null
 
     function parseTwDate(s: string): var {
@@ -86,8 +86,8 @@ Singleton {
         onTriggered: root.refresh()
     }
 
-    // ============ 写操作 ============
-    // 全部走 `task rc.confirmation:no` 关闭确认,避免阻塞 STDIN
+    // ============ Write operations ============
+    // Use task rc.confirmation:no so commands never block on stdin.
 
     Process {
         id: writeProc

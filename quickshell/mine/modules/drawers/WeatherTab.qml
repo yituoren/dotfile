@@ -2,20 +2,20 @@ pragma ComponentBehavior: Bound
 
 // WeatherTab —— dashboard "Weather" tab
 //
-// 布局方式:所有控件 anchors 绝对定位,**写死高度**;chart 例外 —— 两端同时 anchor,
-// 高度由 anchors.top 和 anchors.bottom 之间的距离自动得出。这不是 Layout.fillHeight,
-// 而是 anchor 计算,严格可预测。
+// Use fixed-height, anchored controls. The chart anchors at both ends
+// and takes its height from the space between its top and bottom anchors.
+// This keeps chart sizing predictable across popup heights.
 //
-// 上下两头是固定高度的"卡片"(topSec / cardsRow);中间 chart 吃 popup 高度变化带来的所有
-// slack —— 小屏(popup 518)chart ≈ 126,大屏(popup 600)chart ≈ 208。
+// topSec and cardsRow have fixed heights. The chart takes the remaining space,
+// about 126 px in a 518 px popup and 208 px in a 600 px popup.
 //
-// 垂直布局:
+// Vertical layout:
 //   topSec     116    top-anchored
-//   sep1         1    8 上 8 下
+//   sep1         1 px, 8 px above and below
 //   title24h    16
-//   chart      auto   4 上 / 8 下
-//   sep2         1    8 上下
-//   title7d     16    4 下
+//   chart        remaining height, 4 px above and 8 px below
+//   sep2         1 px, 8 px above and below
+//   title7d      16 px, 4 px below
 //   cardsRow   142    bottom-anchored
 
 import QtQuick
@@ -24,9 +24,9 @@ import qs.services
 Item {
     id: root
 
-    readonly property bool ready: Weather.status === "ok" && Weather.current !== null
+    readonly property bool ready: Weather.current !== null
 
-    // ────────── Loading / error 占位 ──────────
+    // ---- Loading and error states ----
     Column {
         anchors.centerIn: parent
         spacing: 10
@@ -57,7 +57,7 @@ Item {
         }
     }
 
-    // ────────── 主内容容器 ──────────
+    // ---- Main content ----
     Item {
         id: content
         anchors.fill: parent
@@ -75,7 +75,7 @@ Item {
             anchors.top: parent.top
             height: 116
 
-            // ── 右侧 city block ──
+            // ---- City information on the right ----
             Item {
                 id: cityBlock
                 anchors.right: parent.right
@@ -120,7 +120,7 @@ Item {
                 }
             }
 
-            // ── 左侧 5 cell ──
+            // ---- Five cells on the left ----
             Item {
                 id: leftMain
                 anchors.left: parent.left
@@ -134,7 +134,7 @@ Item {
                 readonly property real big: (leftMain.width - leftMain.totalGap) * 0.32
                 readonly property real small: (leftMain.width - leftMain.totalGap) * 0.17
 
-                // Cell 1: icon + 大温度(左对齐,跟下方 chart / cards 同一列起点)
+                // Cell 1 aligns the icon and temperature with the chart and cards below.
                 Item {
                     id: cell1
                     anchors.top: parent.top
@@ -188,7 +188,7 @@ Item {
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: Weather.current
+                            text: Weather.current?.feels != null
                                 ? "Feels " + Math.round(Weather.current.feels) + "°"
                                 : ""
                             color: Theme.colors.on_surface_variant
@@ -205,13 +205,13 @@ Item {
                 Repeater {
                     model: [
                         { icon: "humidity_percentage",
-                          value: Weather.current ? Weather.current.humidity + "%" : "—",
+                          value: Weather.current?.humidity != null ? Weather.current.humidity + "%" : "—",
                           label: "Humidity" },
                         { icon: "air",
-                          value: Weather.current ? (Math.round(Weather.current.wind * 10) / 10) + " km/h" : "—",
+                          value: Weather.current?.wind != null ? (Math.round(Weather.current.wind * 10) / 10) + " km/h" : "—",
                           label: "Wind" },
                         { icon: "rainy",
-                          value: Weather.current ? Weather.current.precip + " mm" : "—",
+                          value: Weather.current?.precip != null ? Weather.current.precip + " mm" : "—",
                           label: "Precip" }
                     ]
                     delegate: Item {
@@ -289,7 +289,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
         }
 
-        // ╔══════════════ chart:两端 anchored,吃剩余 ══════════════╗
+        // ---- Chart stretches between its anchors ----
         Item {
             id: chart
             anchors.left: parent.left
@@ -460,7 +460,7 @@ Item {
                     Text {
                         id: hLabel
                         anchors.verticalCenter: parent.verticalCenter
-                        text: index === 0 ? "now" : Qt.formatDateTime(parent.d.time, "HH")
+                        text: parent.d ? Qt.formatDateTime(parent.d.time, "HH") : ""
                         color: Theme.colors.on_surface_variant
                         opacity: 0.7
                         font.family: "Maple Mono NF CN"
@@ -471,7 +471,7 @@ Item {
             }
         }
 
-        // sep2(直接锚到 cardsRow 上方,不再有 "Next 7 days" 标题)
+        // Anchor the second separator directly above cardsRow.
         Rectangle {
             id: sep2
             anchors.left: parent.left
@@ -483,7 +483,7 @@ Item {
         }
 
         // ╔══════════════ cardsRow ══════════════╗
-        // 142 高,内部三段固定 anchor:header 顶 / icon 中心 / footer 底,12px padding 均匀
+        // The 142 px card fixes its header at the top, icon at the center and footer at the bottom with 12 px padding.
         Item {
             id: cardsRow
             anchors.left: parent.left
@@ -507,12 +507,12 @@ Item {
                     width: cardsRow.cardW
                     height: cardsRow.height
                     radius: 16
-                    // wifi popup 同款配色
+                    // Use the Wi-Fi popup palette.
                     color: dayCell.isToday
                         ? Theme.colors.primary_container
                         : Theme.colors.surface_container
 
-                    // ── header(顶,12 padding)──
+                    // ---- Header (12 px top padding) ----
                     Column {
                         anchors.top: parent.top
                         anchors.topMargin: 12
@@ -544,7 +544,7 @@ Item {
                         }
                     }
 
-                    // ── icon(垂直居中)──
+                    // ---- Centered icon ----
                     Text {
                         anchors.centerIn: parent
                         text: Weather.codeIcon(dayCell.modelData.code, true)
@@ -555,7 +555,7 @@ Item {
                             : Theme.colors.primary
                     }
 
-                    // ── footer(底,12 padding)──
+                    // ---- Footer (12 px bottom padding) ----
                     Column {
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 12
@@ -564,7 +564,7 @@ Item {
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: Math.round(dayCell.modelData.tmax) + "°"
+                            text: dayCell.modelData.tmax != null ? Math.round(dayCell.modelData.tmax) + "°" : "—"
                             color: dayCell.isToday
                                 ? Theme.colors.on_primary_container
                                 : Theme.colors.on_surface
@@ -574,7 +574,7 @@ Item {
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: Math.round(dayCell.modelData.tmin) + "°"
+                            text: dayCell.modelData.tmin != null ? Math.round(dayCell.modelData.tmin) + "°" : "—"
                             color: dayCell.isToday
                                 ? Theme.colors.on_primary_container
                                 : Theme.colors.on_surface_variant
@@ -589,7 +589,7 @@ Item {
         }
     }
 
-    // ╔══════════════ 天气特效层 ══════════════╗
+    // ---- Weather effects ----
     WeatherEffects {
         anchors.fill: parent
         z: 999

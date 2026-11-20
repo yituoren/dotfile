@@ -1,8 +1,8 @@
 pragma ComponentBehavior: Bound
 
-// IosSwitch —— 苹果风格的开关。背景圆角胶囊,白色 knob 平滑滑动。
+// A white switch thumb slides inside a rounded track.
 //
-// 用法:
+// Example:
 //   IosSwitch {
 //       checked: SystemStatus.bluetoothPowered
 //       onToggled: SystemStatus.toggleBluetooth()
