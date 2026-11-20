@@ -1,6 +1,4 @@
 <div align="center">
-  <img src="assets/wallpaper.jpg" alt="Wallpaper from my Arch Linux desktop" width="100%" style="object-fit: cover; border-radius: 10px;">
-
   <h1 align="center">My Arch Linux Dotfiles</h1>
 
   <p align="center">
@@ -30,9 +28,11 @@
 ## 🖼️ **Gallery**
 
 <div align="center">
-  <img src="assets/appearance.jpg" alt="My earlier Hyprland desktop" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-  <br>
-  <i>From my Hyprland setup, before the move to niri. <a href="assets/wallpaper.jpg">View wallpaper</a>.</i>
+  <a href="https://raw.githubusercontent.com/yituoren/dotfile/main/assets/desktop.mp4">
+    <img src="assets/desktop.webp" alt="Screen recording of my niri desktop and Quickshell dashboard" width="100%">
+    <br>Full recording with audio (2:55)
+  </a>
+  · <a href="assets/legacy.jpg">Legacy Hyprland desktop</a>
 </div>
 
 ---
