@@ -292,7 +292,16 @@ Singleton {
             // Refresh the forecast at the known location. Recheck location every 30 minutes.
             root.fetchWeather()
         } else {
+            if (root.status === "error") root.status = "loading"
             geoProc.running = true
+        }
+    }
+
+    Connections {
+        target: PopupManager
+        function onCurrentPopupChanged() {
+            if (PopupManager.currentPopup === "dashboard" && root.status === "error")
+                root.refresh()
         }
     }
 
