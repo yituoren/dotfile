@@ -103,7 +103,7 @@ binds {
     Print hotkey-overlay-title="Capture the screen" { screenshot-screen; }     // Capture the screen to the clipboard and a file.
     Mod+Alt+S hotkey-overlay-title="Capture the active window" { screenshot-window; }     // Capture the current window.
     Mod+Shift+C hotkey-overlay-title="Copy a screen color" { spawn-sh "color=$(niri msg pick-color | sed -n 's/^Hex: //p'); [ -z \"$color\" ] || printf %s \"$color\" | wl-copy"; }   // Copy the picked hex color.
-    Mod+Shift+X hotkey-overlay-title="Copy text from a screen region" { spawn-sh "grim -g \"$(slurp)\" /tmp/ocr.png && tesseract /tmp/ocr.png stdout | wl-copy && rm /tmp/ocr.png"; }  // OCR
+    Mod+Shift+X repeat=false hotkey-overlay-title="Start or stop screen recording" { spawn-sh "exec ~/.dotfiles/scripts/toggle-recording.sh"; }
 
     // ---- Media ----
     XF86AudioRaiseVolume allow-when-locked=true hotkey-overlay-title="Raise volume" { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.02+" "--limit" "1.5"; }

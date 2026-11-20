@@ -12,7 +12,7 @@
 
 ## Spectrum settings
 
-Edit [cava.conf](../quickshell/mine/cava.conf) to change the number of bands, frame rate or capture source. The default is 32 bands at 60 frames per second. Keep the output in raw ASCII with a maximum of 100. CAVA loads this file when the shell starts its visualizer. EasyEffects can process audio upstream of the monitor source.
+Edit [cava.conf](../quickshell/mine/cava.conf) to change the number of bands, frame rate or capture source. The default is 32 bands at 60 frames per second. Keep the output in raw ASCII with a maximum of 100. CAVA loads this file when the shell starts its visualizer.
 
 ## Inspect the current session
 

@@ -14,9 +14,6 @@ spawn-at-startup "gnome-keyring-daemon" "--start" "--components=secrets"
 // The session guard starts the idle monitors and handles logind lock requests.
 spawn-at-startup "systemctl" "--user" "start" "mine-sleep-lock.service"
 
-// Start EasyEffects with the session when installed.
-spawn-sh-at-startup "if command -v easyeffects >/dev/null 2>&1; then exec easyeffects --service-mode; fi"
-
 // Clipboard history using cliphist and a compositor-independent wl-paste watcher.
 spawn-sh-at-startup "wl-paste --type text  --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"

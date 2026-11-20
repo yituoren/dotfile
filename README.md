@@ -46,11 +46,11 @@
 | Component | Software | Role |
 | :--- | :--- | :--- |
 | **[Compositor](docs/niri.md)** | [niri](https://github.com/YaLTeR/niri) | Scrolling window layout, workspaces and overview |
-| **[Desktop Shell](docs/quickshell.md)** | [Quickshell](https://quickshell.org/) · [Qt Quick](https://doc.qt.io/qt-6/qtquick-index.html) | Per-display bar, dashboard and popup menus |
+| **[Desktop Shell](docs/quickshell.md)** | [Quickshell](https://quickshell.org/) · [Qt Quick](https://doc.qt.io/qt-6/qtquick-index.html) | Quickshell hosts the shell · Qt Quick draws and animates its UI |
 | **[Popup Renderer](caelestia-blobs/)** | [Caelestia.Blobs](https://github.com/caelestia-dots/shell) | Local adaptation that joins the bar and popup into one shape |
-| **[Wallpaper & Colors](docs/colors.md)** | [awww](https://codeberg.org/LGFae/awww) · [matugen](https://github.com/InioX/matugen) · [jq](https://jqlang.org/) | Display the wallpaper · extract its palette · update terminal colors |
-| **[Login Screen](sddm/README.md)** | [SDDM](https://github.com/sddm/sddm) · [ImageMagick](https://imagemagick.org/) | Qt greeter with a blurred copy of the wallpaper |
-| **[Lock & Idle](docs/quickshell.md#session-lock)** | [Quickshell](https://quickshell.org/) · [systemd-logind](https://www.freedesktop.org/software/systemd/man/latest/systemd-logind.service.html)<br>[PyGObject](https://pygobject.gnome.org/) · [Linux-PAM](https://github.com/linux-pam/linux-pam) | Lock at 5 min · screen off at 10 min · suspend at 15 min<br>Lock before sleep and authenticate on return |
+| **[Wallpaper & Colors](docs/colors.md)** | [awww](https://codeberg.org/LGFae/awww) · [matugen](https://github.com/InioX/matugen) · [jq](https://jqlang.org/) | Display the wallpaper · generate colors with matugen · read them with jq |
+| **[Login Screen](sddm/README.md)** | [SDDM](https://github.com/sddm/sddm) · [ImageMagick](https://imagemagick.org/) | SDDM handles login · ImageMagick resizes and blurs its wallpaper |
+| **[Lock & Idle](docs/quickshell.md#session-lock)** | [Quickshell](https://quickshell.org/) · [systemd-logind](https://www.freedesktop.org/software/systemd/man/latest/systemd-logind.service.html)<br>[PyGObject](https://pygobject.gnome.org/) · [Linux-PAM](https://github.com/linux-pam/linux-pam) | Lock at 5 min · screen off at 10 min · suspend at 15 min<br>PyGObject talks to logind · PAM checks the password |
 
 ### 🎛️ **Shell Feature**
 
@@ -69,8 +69,8 @@
 
 | Component | Software | Role |
 | :--- | :--- | :--- |
-| **[Audio](docs/media.md)** | [PipeWire](https://pipewire.org/) · [WirePlumber](https://pipewire.pages.freedesktop.org/wireplumber/) · [pipewire-pulse](https://docs.pipewire.org/page_man_pipewire-pulse_1.html)<br>[EasyEffects](https://github.com/wwmm/easyeffects) | Volume, mute and output selection<br>Optional audio effects |
-| **[Wi-Fi & Bluetooth](quickshell/mine/services/SystemStatus.qml)** | [NetworkManager](https://networkmanager.dev/) · [plasma-nm](https://invent.kde.org/plasma/plasma-nm)<br>[BlueZ](https://www.bluez.org/) · [BlueDevil](https://invent.kde.org/plasma/bluedevil) | Wi-Fi connections and network settings<br>Bluetooth devices and pairing |
+| **[Audio](docs/media.md)** | [PipeWire](https://pipewire.org/) · [WirePlumber](https://pipewire.pages.freedesktop.org/wireplumber/) · [pipewire-pulse](https://docs.pipewire.org/page_man_pipewire-pulse_1.html) | PipeWire routes audio · WirePlumber controls volume and mute<br>pipewire-pulse connects PulseAudio clients and output controls |
+| **[Wi-Fi & Bluetooth](quickshell/mine/services/SystemStatus.qml)** | [NetworkManager](https://networkmanager.dev/) · [plasma-nm](https://invent.kde.org/plasma/plasma-nm)<br>[BlueZ](https://www.bluez.org/) · [BlueDevil](https://invent.kde.org/plasma/bluedevil) | NetworkManager manages connections · plasma-nm edits them<br>BlueZ connects devices · BlueDevil opens the pairing wizard |
 | **[Brightness](quickshell/mine/services/SystemStatus.qml)** | [brightnessctl](https://github.com/Hummer12007/brightnessctl) · [ddcutil](https://www.ddcutil.com/) | Internal backlight and external DDC/CI monitors |
 | **[Launcher & Clipboard](docs/fuzzel.md)** | [fuzzel](https://codeberg.org/dnkl/fuzzel) · [cliphist](https://github.com/sentriz/cliphist) · [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Application launcher and clipboard history |
 | **[Terminals](docs/wezterm.md)** | [WezTerm](https://wezterm.org/) · [Kitty](https://sw.kovidgoyal.net/kitty/) | Primary and secondary terminal emulators |
@@ -79,10 +79,10 @@
 | **Editor & Browser** | [Zed](https://zed.dev/) · [Google Chrome](https://www.google.com/chrome/) | Code editing and web browsing |
 | **[Input Method](niri/environment.kdl)** | [Fcitx5](https://fcitx-im.org/wiki/Fcitx_5) · [Rime](https://rime.im/) · [Rime-Ice](https://github.com/iDvel/rime-ice)<br>[Autumn](https://github.com/thep0y/fcitx5-themes-candlelight/tree/main/autumn) | Chinese Pinyin input and candidate window theme |
 | **[Fonts & Symbols](docs/colors.md)** | [Maple Mono NF CN](https://github.com/subframe7536/maple-font) · [Google Sans Flex](https://design.google/library/google-sans-flex-font)<br>[Material Symbols Rounded](https://fonts.google.com/icons) | Terminal, launcher and GTK text<br>Shell icons |
-| **[Desktop Theme](matugen/templates/kde/MineDesktop.colors)** | [Darkly](https://github.com/Bali10050/darkly) · [Breeze Plus](https://github.com/mjkim0727/breeze-plus) · [Bibata Modern Classic](https://github.com/ful1e5/Bibata_Cursor) | KDE widgets, application icons and pointer |
+| **[Desktop Theme](matugen/templates/kde/MineDesktop.colors)** | [Darkly](https://github.com/Bali10050/darkly) · [Breeze Plus](https://github.com/mjkim0727/breeze-plus) · [Bibata Modern Classic](https://github.com/ful1e5/Bibata_Cursor) | Darkly styles KDE widgets · Breeze Plus supplies icons<br>Bibata supplies the pointer |
 | **[Portals](xdg-desktop-portal/niri-portals.conf)** | [xdg-desktop-portal-gtk](https://github.com/flatpak/xdg-desktop-portal-gtk) · [GNOME Keyring](https://gitlab.gnome.org/GNOME/gnome-keyring) | File dialogs and secret storage |
 | **[Screenshots & Color Picker](niri/binds.kdl)** | [niri](https://github.com/YaLTeR/niri) · [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | niri captures screens, windows and regions<br>`wl-copy` copies the picked color |
-| **[Copy Text From an Image](niri/binds.kdl)** | [slurp](https://github.com/emersion/slurp) · [grim](https://gitlab.freedesktop.org/emersion/grim)<br>[Tesseract](https://github.com/tesseract-ocr/tesseract) · [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Select an area → capture its pixels<br>Recognize the text → copy it to the clipboard |
+| **[Screen Recording](docs/niri.md#screen-recording)** | [wf-recorder](https://github.com/ammen99/wf-recorder) · [FFmpeg](https://ffmpeg.org/) | Record the focused display and system audio to a video file |
 | **[Proxy](clash-verge/config.yaml)** | [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) · [Mihomo](https://github.com/MetaCubeX/mihomo) | Local VLESS profile with IPv6 and IPv4 nodes<br>Fill in provider details before importing the template |
 
 ---

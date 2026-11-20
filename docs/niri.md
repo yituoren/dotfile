@@ -24,6 +24,12 @@ niri validate
 
 niri reloads saved configuration files. Startup commands run at the next login. Match monitor names and modes to the output of `niri msg outputs`. The current top strut is 61 px for the 53 px bar and its 8 px margin.
 
+## Screen recording
+
+Press `Super+Shift+X` to start recording the focused display. Press it again to finish and save the Matroska video in the XDG Videos directory under `Recordings/` (usually `~/Videos/Recordings/`).
+
+The recorder captures playback from the default output's monitor. With no default output it records video only. The script uses NVIDIA H.264 encoding when available and falls back to libx264. A transient systemd user service receives SIGINT on stop so wf-recorder can finish writing the file. [Recording script](../scripts/toggle-recording.sh)
+
 ## Keyboard help and session prompts
 
 Press `Super+/` to open the shortcut sheet. Press Down to browse categories, Right to enter a category and Left to return. Use Up and Down to scroll the bindings. Type in the search field to filter all categories, then press Down to browse matches. Escape closes the sheet. It reads the chords in `binds.kdl` each time it opens. Keep the section headings (`// ---- Applications ----`) and use niri's `hotkey-overlay-title` on bindings that launch external commands.
