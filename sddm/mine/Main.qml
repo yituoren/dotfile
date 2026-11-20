@@ -24,6 +24,8 @@ Rectangle {
     }
     property bool switching: false
     readonly property bool manual: switching || !defaultUser
+    property real accountReveal: manual ? 1 : 0
+    Behavior on accountReveal { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
     readonly property string loginName: manual ? account.editText.trim() : defaultUser
     property bool busy: false
     property string errorText: ""
@@ -73,8 +75,10 @@ Rectangle {
         property string symbol
         property bool showLabel: false
         property bool primary: false
+        property string hint: showLabel || primary ? "" : text
+        font.family: root.mono; font.styleName: "Medium"; font.pixelSize: 15
         implicitHeight: 38
-        implicitWidth: showLabel ? caption.implicitWidth + 24 : implicitHeight
+        implicitWidth: showLabel ? glyph.implicitWidth + label.implicitWidth + 32 : implicitHeight
         hoverEnabled: true
         Accessible.name: text
         background: Rectangle {
@@ -88,27 +92,29 @@ Rectangle {
         }
         contentItem: Item {
             Row {
-                id: caption
                 anchors.centerIn: parent
                 spacing: 8
                 Text {
+                    id: glyph
                     anchors.verticalCenter: parent.verticalCenter
                     text: button.symbol; font.family: root.symbols; font.pixelSize: button.primary ? 23 : 20
-                    color: button.primary ? root.accentInk : root.ink
+                    color: button.primary ? root.accentInk : button.showLabel ? root.accent : root.ink
                 }
                 Text {
+                    id: label
                     anchors.verticalCenter: parent.verticalCenter
                     visible: button.showLabel
-                    text: button.text; font.family: root.mono; font.styleName: "Medium"; font.pixelSize: 13
-                    color: root.ink
+                    width: Math.min(implicitWidth, Math.max(0, button.width - glyph.implicitWidth - 32))
+                    text: button.text; font: button.font; color: root.ink
+                    elide: Text.ElideRight; textFormat: Text.PlainText
                 }
             }
         }
         ToolTip {
-            visible: button.hovered && !button.showLabel && !button.primary
-            delay: 500; text: button.text; y: -implicitHeight - 4
+            visible: button.hovered && !!button.hint
+            delay: 500; text: button.hint; y: -implicitHeight - 4
             background: Rectangle { radius: 8; color: root.panel }
-            contentItem: Text { text: button.text; color: root.ink; font.family: root.mono; font.pixelSize: 12 }
+            contentItem: Text { text: button.hint; color: root.ink; font.family: root.mono; font.pixelSize: 12 }
         }
         HoverHandler { cursorShape: Qt.PointingHandCursor }
     }
@@ -118,22 +124,22 @@ Rectangle {
         property string symbol
         property bool opensUp: false
         implicitHeight: 40
-        leftPadding: 36; rightPadding: 25
+        leftPadding: editable ? 49 : 36; rightPadding: editable ? 44 : 25
         font.family: root.mono; font.pixelSize: 14
         palette.text: root.ink; palette.buttonText: root.ink; palette.highlight: root.accent
         background: Rectangle {
-            radius: 12
+            radius: box.editable ? 15 : 12
             color: box.editable || box.hovered || box.visualFocus || box.popup.visible ? root.panel : "transparent"
             border.width: box.activeFocus && box.editable ? 2 : box.visualFocus ? 1 : 0
             border.color: root.accent
             Text {
-                anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                text: box.symbol; font.family: root.symbols; font.pixelSize: 19; color: root.accent
+                anchors.left: parent.left; anchors.leftMargin: box.editable ? 16 : 10; anchors.verticalCenter: parent.verticalCenter
+                text: box.symbol; font.family: root.symbols; font.pixelSize: box.editable ? 21 : 19; color: root.accent
             }
         }
         indicator: Text {
             visible: box.count > 0 && (box.editable || box.count > 1)
-            x: box.width - width - 7; y: (box.height - height) / 2
+            x: box.width - width - (box.editable ? 18 : 7); y: (box.height - height) / 2
             text: box.opensUp ? "expand_less" : "expand_more"
             font.family: root.symbols; font.pixelSize: 18; color: root.muted
         }
@@ -165,35 +171,39 @@ Rectangle {
         width: root.width / root.uiScale; height: root.height / root.uiScale; scale: root.uiScale
 
         Column {
-            id: form
-            anchors.centerIn: parent
+            id: clockBlock
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: -84
             width: Math.min(344, stage.width - 40)
-            spacing: 0
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: Qt.formatTime(root.now, "HH:mm")
-                color: root.ink; font.family: root.mono; font.styleName: "Bold"; font.pixelSize: 86
+                color: root.ink; font.family: root.mono; font.styleName: "Bold"; font.pixelSize: 96
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.now.toLocaleDateString(Qt.locale("en_US"), "dddd, MMMM d")
-                color: root.ink; font.family: root.mono; font.styleName: "Medium"; font.pixelSize: 18
+                color: root.ink; font.family: root.mono; font.styleName: "Medium"; font.pixelSize: 19
             }
-            Item { width: 1; height: 30 }
+        }
+        Item {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: clockBlock.bottom; anchors.topMargin: 36
+            width: clockBlock.width
+            height: feedback.visible ? feedback.y + feedback.height : passwordRow.y + passwordRow.height
             Item {
-                width: parent.width; height: 48
-                Text {
-                    anchors.fill: parent; visible: !root.manual
-                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                    text: root.defaultUser; textFormat: Text.PlainText; elide: Text.ElideRight
-                    color: root.ink; font.family: root.mono; font.styleName: "Bold"; font.pixelSize: 29
-                }
+                id: accountSlot
+                width: parent.width; height: (account.height + 8) * root.accountReveal
+                visible: root.manual || height > 0
+                clip: true
                 Picker {
                     id: account
-                    anchors.fill: parent; visible: root.manual; enabled: !root.busy
+                    width: parent.width; height: 54; y: -6 * (1 - root.accountReveal)
+                    opacity: root.accountReveal; enabled: root.manual && !root.busy
                     model: userModel; textRole: "name"; currentIndex: -1
-                    editable: true; symbol: "person"; font.pixelSize: 22
+                    editable: true; symbol: "person"; font.pixelSize: 20
                     Accessible.name: "Username"
                     contentItem: TextField {
                         padding: 0; background: null
@@ -208,8 +218,9 @@ Rectangle {
                     onAccepted: if (editText.trim()) password.forceActiveFocus()
                 }
             }
-            Item { width: 1; height: 8 }
             Rectangle {
+                id: passwordRow
+                anchors.top: accountSlot.bottom
                 width: parent.width; height: 54; radius: 15
                 color: root.panel; border.width: 2
                 border.color: root.errorText ? root.errorInk : password.activeFocus ? root.accent : root.field
@@ -238,28 +249,33 @@ Rectangle {
                     onClicked: root.login()
                 }
             }
-            Item {
-                width: parent.width; height: 74
-                Text {
-                    id: feedback
-                    width: parent.width; topPadding: 6
-                    visible: !!root.errorText
-                    horizontalAlignment: Text.AlignHCenter; text: root.errorText; color: root.errorInk
-                    font.family: root.mono; font.pixelSize: 13; wrapMode: Text.WordWrap
-                }
-                Action {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: (feedback.visible ? feedback.height : 0) + 6
-                    visible: !!root.defaultUser
-                    enabled: !root.busy; showLabel: true
-                    symbol: root.switching ? "arrow_back" : "switch_account"
-                    text: root.switching ? "Back" : "Switch user"
-                    onClicked: root.switchUser(!root.switching)
-                }
+            Text {
+                id: feedback
+                anchors.top: passwordRow.bottom; anchors.topMargin: 8
+                width: parent.width; visible: !!root.errorText
+                horizontalAlignment: Text.AlignHCenter; text: root.errorText; color: root.errorInk
+                font.family: root.mono; font.pixelSize: 13; wrapMode: Text.WordWrap
             }
         }
 
+        Action {
+            id: accountSwitch
+            readonly property bool showsBack: root.accountReveal >= 0.5
+            visible: !!root.defaultUser; enabled: !root.busy
+            showLabel: true; height: 40
+            width: Math.min(implicitWidth, 240, stage.width - 32)
+            opacity: Math.abs(2 * root.accountReveal - 1)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: stage.width < 240 + 2 * (Math.max(sessionTools.width, powerTools.width) + 24) ? 62 : 16
+            symbol: showsBack ? "arrow_back" : "person"
+            text: showsBack ? "Back" : root.defaultUser
+            hint: root.switching ? "" : "Switch user"
+            Accessible.name: root.switching ? "Back" : "Switch user, " + root.defaultUser
+            onClicked: root.switchUser(!root.switching)
+        }
         Row {
+            id: sessionTools
             anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 16; spacing: 4
             enabled: !root.busy
             Picker {
@@ -281,6 +297,7 @@ Rectangle {
             }
         }
         Row {
+            id: powerTools
             anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 16; spacing: 6
             enabled: !root.busy
             Action { text: "Sleep"; symbol: "bedtime"; visible: sddm.canSuspend; onClicked: sddm.suspend() }
