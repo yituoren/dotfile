@@ -5,7 +5,11 @@
 sddm-greeter-qt6 --test-mode --theme ~/.dotfiles/sddm/mine
 ```
 
-The installer enables Mine for the next SDDM login. Niri is selected by default. Use the session menu to sign in to another desktop.
+The installer enables Mine for the next SDDM login. The greeter opens with the last account selected and the password field focused. Type your password and press Enter to sign in.
+
+Choose **Switch user** to select another account or type a username. Press Escape or choose **Back** to return to the default account. When no account is listed or remembered, the username field opens automatically.
+
+The session menu in the lower left defaults to Niri. A keyboard layout selector appears beside it when multiple layouts are available. Power controls sit in the lower right.
 
 ## Files
 
